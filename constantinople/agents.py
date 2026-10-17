@@ -86,9 +86,9 @@ def canned(prompt_file: str, ctx: dict) -> dict:
                 "products": ["tee", "mug", "tote"]}
     if "listing" in prompt_file:
         concept = (ctx.get("trend_scan") or {}).get("concept", name)
-        return {"summary": f"Listing drafted: \"{concept.title()}\"", "title": f"{concept.title()} | Hand-Drawn Gift | Soft Unisex",
+        return {"summary": f"Listing drafted: \"{concept.title()}\"", "title": f"{concept.title()} | Illustrated Gift Tee | Soft Unisex",
                 "tags": ["gift for her", "cottagecore", "hand drawn", "botanical", "cozy", "nature lover", "unisex tee", "minimalist", "plant lover", "birthday gift", "aesthetic", "illustrated", "soft"],
-                "description": f"A soft, hand-drawn {concept} printed on a unisex tee. Made to order, shipped in 3-5 days.", "price": 24.95}
+                "description": f"A soft, illustrated {concept} printed on a unisex tee. Made to order, shipped in 3-5 days. Design created with AI tools from our own original prompts and printed on demand.", "price": 24.95}
     if "score" in prompt_file:
         return {"summary": "Scored 6 candidates; picked 3", "picks": [0, 2, 4], "scores": [91, 74, 88, 69, 86, 72]}
     if "thumbnail" in prompt_file:
