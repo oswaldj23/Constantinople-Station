@@ -1,7 +1,7 @@
 id: etsy
 name: ETSY PRODUCTION BAY
 agents: [FORGE, MINT, PRESS]
-cadence_seconds: 5400          # a new listing every 90 minutes while running
+cadence_seconds: 86400         # one new listing a day while the shop is young; raise later
 artifact: listing
 complete_msg: "Listing live: {title}"
 steps:
