@@ -34,11 +34,14 @@ subscribers: set[asyncio.Queue] = set()
 _loop: asyncio.AbstractEventLoop | None = None
 
 
+def _disp(ev: dict) -> dict:
+    d = orch.bays.get(ev.get("bay"))
+    return {**ev, "bay": d.display, "source_bay": ev["bay"]} if d and d.display != ev["bay"] else ev
+
+
 def _fanout(ev: dict):
     if _loop is None: return
-    d = orch.bays.get(ev.get("bay"))
-    if d and d.display != ev["bay"]:
-        ev = {**ev, "bay": d.display, "source_bay": ev["bay"]}
+    ev = _disp(ev)
     for q in list(subscribers):
         _loop.call_soon_threadsafe(q.put_nowait, ev)
 
@@ -65,7 +68,7 @@ async def events(request: Request):
         try:
             yield f"data: {json.dumps(ledger.snapshot())}\n\n"
             for ev in reversed(ledger.recent(150)):
-                yield f"data: {json.dumps(ev)}\n\n"
+                yield f"data: {json.dumps(_disp(ev))}\n\n"
             while True:
                 if await request.is_disconnected(): break
                 try:
@@ -96,6 +99,18 @@ def artifacts(bay: str | None = None, limit: int = 20):
 @app.get("/approvals")
 def approvals(status: str = "pending"):
     return ledger.approvals(status)
+
+
+@app.get("/listings")
+def listings():
+    from . import memory
+    return memory.listing_performance(ledger)
+
+
+@app.get("/memory")
+def memory_digest(days: int = 7):
+    from . import memory
+    return memory.digest(ledger, days)
 
 
 @app.get("/mother")

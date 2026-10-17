@@ -80,7 +80,7 @@ class Runner:
         title = _title(ctx)
         if bay.spec.get("artifact"):
             L.save_artifact(bay.id, bay.spec["artifact"], title, {k: v for k, v in ctx.items() if not k.startswith("_") and k not in self.shared}, run_id)
-        if bay.spec.get("quiet"):
+        if bay.spec.get("quiet") or bay.spec.get("no_complete"):
             return ctx
         L.emit(bay.id, "complete", bay.spec.get("complete_msg", "Run complete").replace("{title}", title), agent=bay.agents[-1] if bay.agents else "CONSTANTINOPLE",
                run_id=run_id, output={"title": title, "conf": ctx.get("score", {}).get("scores", [90])[0] if isinstance(ctx.get("score"), dict) else 90})

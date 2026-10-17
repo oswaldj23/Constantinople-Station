@@ -51,3 +51,15 @@ async def poll_messages(ctx, *, dry_run: bool = True, **_):
         m = random.choice(["Can I get this in XL?", "Does the mug ship to Canada?", "Received the wrong size", "Is the candle soy wax?"])
         return {"messages": [{"platform": "etsy", "from": "buyer", "text": m, "order_id": random.randint(10**8, 10**9)}], "cost": 0.0, "summary": "1 inbound message"}
     return {"messages": [], "cost": 0.0, "summary": "message polling not configured"}
+
+
+async def listing_stats(ctx, *, dry_run: bool = True, **_):
+    """Views and favourites per active listing (needs the Etsy token). Stored for Mother's review."""
+    if dry_run or not config.ETSY_ACCESS_TOKEN or not config.ETSY_SHOP_ID:
+        return {"stats": [], "cost": 0.0, "summary": "Etsy stats unavailable (no Etsy token yet)"}
+    import httpx, json
+    async with httpx.AsyncClient(timeout=60, headers=_headers()) as c:
+        r = await c.get(f"{API}/shops/{config.ETSY_SHOP_ID}/listings/active", params={"limit": 100}); r.raise_for_status()
+        stats = [{"listing_id": x["listing_id"], "title": x.get("title", ""), "views": x.get("views", 0), "favorites": x.get("num_favorers", 0), "quantity": x.get("quantity", 0)} for x in r.json().get("results", [])]
+    ctx["_ledger"].kv_set("etsy_stats", json.dumps(stats))
+    return {"stats": stats, "cost": 0.0, "summary": f"{len(stats)} active listing(s) · {sum(s['views'] for s in stats)} views · {sum(s['favorites'] for s in stats)} favourites"}

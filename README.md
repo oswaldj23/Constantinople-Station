@@ -20,6 +20,26 @@ MOTHER is the overseer. The crew reports to her; she reports to you, the Creator
 
 Everything she does is an event with her name on it (`kind: mother`). `GET /mother` shows her recent decisions, today's spend against the cap, and anything she has escalated to you. Escalations sit in `/approvals` with gate `escalation`; clear them with `python -m constantinople approve <id>` once you've looked.
 
+## Phone control (Telegram)
+
+1. In Telegram, message **@BotFather** → `/newbot` → pick a name and a username ending in `bot` → copy the token.
+2. `TELEGRAM_BOT_TOKEN=...` in `.env`, restart the engine.
+3. Open your bot in Telegram and send `/start`. That chat becomes the bridge console; nobody else is answered.
+
+Mother then sends approval requests with Approve/Reject buttons, escalations, sales, new listings, incidents, waypoint crossings, HERALD's drafted replies, and a morning report at `REPORT_HOUR`. Commands: `/status /approvals /approve N /reject N /hold BAY /boost BAY /run BAY /report /mother /listings`.
+
+## Real Comms (inbox)
+
+Etsy and Printify send every buyer message and order as an email. Point the engine at that inbox (Gmail: turn on 2-step verification, make an **App Password**, use it as `MAIL_PASSWORD` with `MAIL_IMAP_HOST=imap.gmail.com`). HERALD reads new Etsy conversation emails, drafts a reply in the station voice, and hands it to you on Telegram with a copy box: Etsy does not allow replies by API or email, so the last tap is yours.
+
+## Memory and the control loop
+
+Mother keeps notes to herself after every mission review (`/memory` shows the digest she reasons from: sales, revenue, spend, listings, incidents, top sellers, past directives, her notes). Treasury reviews every listing daily (`/listings`): **winner** = 3+ sales, Research is told to make variants; **stale** = no sales in 30 days. With `AUTO_RETIRE=true` stale listings are unpublished; with `AUTO_PRICE=true` winners get +10%. Both are off by default so you can watch the flags first.
+
+## Print quality
+
+Each design is rendered twice, a light-shirt palette and a dark-shirt palette, upscaled to 4500 px, and assigned to the matching shirt colours on the product, so white and black tees both print well.
+
 ## Running 24/7
 
 The engine is a single long-running process; two scripts keep it alive.

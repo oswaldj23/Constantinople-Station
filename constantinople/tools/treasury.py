@@ -41,8 +41,41 @@ async def publish_directive(ctx, *, from_step: str = "mission_review", dry_run: 
     d = r.get("directive")
     if d and d == ctx["_ledger"].kv_get("directive"):
         return {"cost": 0.0, "summary": "Directive unchanged"}
+    note = r.get("note")
+    if note:
+        from .. import memory
+        memory.add_note(ctx["_ledger"], note)
     if d:
         ctx["_ledger"].kv_set("directive", d)
         st = mission.state(ctx["_ledger"])
         ctx["_ledger"].emit("core", "mission", "Directive updated · " + d, agent=config.MOTHER_NAME, directive=d, velocity_per_day=st["velocity_per_day"], run_id=ctx["run_id"])
     return {"cost": 0.0, "summary": "Directive published" if d else "No directive change"}
+
+
+async def review_listings(ctx, *, dry_run: bool = True, **_):
+    """Daily control loop: which listings sell, which are dead, what Research should double down on.
+    Flags only by default. AUTO_RETIRE unpublishes stale listings; AUTO_PRICE raises winners' prices 10%."""
+    from .. import memory, config as cfg
+    rows = memory.listing_performance(ctx["_ledger"])
+    winners = [r for r in rows if r["flag"] == "winner"]; stale = [r for r in rows if r["flag"] == "stale"]
+    actions = []
+    if not dry_run and cfg.PRINTIFY_API_KEY:
+        import httpx
+        async with httpx.AsyncClient(timeout=60, headers={"Authorization": f"Bearer {cfg.PRINTIFY_API_KEY}"}) as c:
+            if cfg.AUTO_RETIRE:
+                for r in stale:
+                    if r.get("product_id"):
+                        await c.post(f"https://api.printify.com/v1/shops/{cfg.PRINTIFY_SHOP_ID}/products/{r['product_id']}/unpublish.json"); actions.append(f"retired {r['concept']}")
+            if cfg.AUTO_PRICE:
+                for r in winners:
+                    if r.get("product_id"):
+                        pr = await c.get(f"https://api.printify.com/v1/shops/{cfg.PRINTIFY_SHOP_ID}/products/{r['product_id']}.json")
+                        if pr.status_code == 200:
+                            vs = [{"id": v["id"], "price": int(v["price"] * 1.10)} for v in pr.json().get("variants", []) if v.get("is_enabled")]
+                            await c.put(f"https://api.printify.com/v1/shops/{cfg.PRINTIFY_SHOP_ID}/products/{r['product_id']}.json", json={"variants": vs}); actions.append(f"+10% on {r['concept']}")
+    L = ctx["_ledger"]
+    if winners: L.emit("treasury", "trend", "Winners: " + ", ".join(f"{w['concept']} ({w['sales']} sold)" for w in winners[:5]) + " · Research: make variants of these", agent="VAULT", run_id=ctx["run_id"])
+    if stale: L.emit("treasury", "status", f"{len(stale)} listing(s) with no sales after 30 days" + (" · retired" if cfg.AUTO_RETIRE else " · flagged for review"), agent="VAULT", run_id=ctx["run_id"])
+    L.kv_set("winners", ", ".join(w["concept"] for w in winners[:5]))
+    return {"rows": len(rows), "winners": [w["concept"] for w in winners], "stale": [s["concept"] for s in stale], "actions": actions, "cost": 0.0,
+            "summary": f"{len(rows)} listings reviewed · {len(winners)} winner(s) · {len(stale)} stale" + (f" · {len(actions)} action(s)" if actions else "")}

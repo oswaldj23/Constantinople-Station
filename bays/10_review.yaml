@@ -1,0 +1,8 @@
+id: review
+name: TREASURY REVIEW
+display_as: treasury
+no_complete: true
+agents: [VAULT]
+cadence_seconds: 86400         # once a day: winners, stale listings, what Research should double down on
+steps:
+  - {id: review, name: Listing review, kind: tool, tool: treasury.review_listings}

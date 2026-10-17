@@ -36,13 +36,24 @@ MOTHER_NAME    = os.getenv("MOTHER_NAME", "MOTHER")
 AUTONOMY       = os.getenv("AUTONOMY", "assist").lower()     # assist: gates wait for you · full: Mother decides within caps
 DAILY_SPEND_CAP = float(os.getenv("DAILY_SPEND_CAP", "10"))
 MAX_RETRIES    = int(os.getenv("MAX_RETRIES", "3"))
+AUTO_RETIRE    = _bool(os.getenv("AUTO_RETIRE"), False)      # Treasury may unpublish listings with no sales after 30 days
+AUTO_PRICE     = _bool(os.getenv("AUTO_PRICE"), False)       # Treasury may raise winners' prices 10%
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or None
+TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID") or None
+REPORT_HOUR        = int(os.getenv("REPORT_HOUR", "8"))        # local hour for the morning report
+REPORT_UTC_OFFSET  = int(os.getenv("REPORT_UTC_OFFSET", "-4"))  # New York in summer is -4, winter -5
+MAIL_IMAP_HOST = os.getenv("MAIL_IMAP_HOST") or None           # e.g. imap.gmail.com
+MAIL_USER      = os.getenv("MAIL_USER") or None
+MAIL_PASSWORD  = os.getenv("MAIL_PASSWORD") or None            # Gmail: an App Password, not your login password
 
 def integrations() -> dict:
     """What is actually wired up, for the dashboard's setup checklist."""
     return {"model": bool(ANTHROPIC_API_KEY), "images": IMAGE_PROVIDER if IMAGE_PROVIDER != "none" and IMAGE_API_KEY else None,
             "printify": bool(PRINTIFY_API_KEY and PRINTIFY_SHOP_ID), "etsy": bool(ETSY_ACCESS_TOKEN and ETSY_SHOP_ID), "etsy_pending": bool(ETSY_API_KEY and not ETSY_ACCESS_TOKEN),
             "fiverr": False, "dry_run": DRY_RUN, "auto_approve": AUTO_APPROVE,
-            "autonomy": AUTONOMY, "daily_cap": DAILY_SPEND_CAP, "mother": MOTHER_NAME, "creator": CREATOR}
+            "autonomy": AUTONOMY, "daily_cap": DAILY_SPEND_CAP, "mother": MOTHER_NAME, "creator": CREATOR,
+            "telegram": bool(TELEGRAM_BOT_TOKEN), "mail": bool(MAIL_IMAP_HOST and MAIL_USER and MAIL_PASSWORD),
+            "auto_retire": AUTO_RETIRE, "auto_price": AUTO_PRICE}
 
 # USD per 1M tokens, used to cost every agent step. Adjust to the model you run.
 PRICES = {

@@ -45,7 +45,9 @@ async def run_agent(agent: str, prompt_file: str, ctx: dict, *, dry_run: bool) -
     """Returns (result_json, cost_usd, summary_line)."""
     try:
         from . import mission
-        ctx = {**ctx, "mission": mission.state(ctx["_ledger"]), "station": config.STATION_NAME, "_bays": ctx["_ledger"].bays()}
+        from . import memory
+        ctx = {**ctx, "mission": mission.state(ctx["_ledger"]), "station": config.STATION_NAME, "_bays": ctx["_ledger"].bays(),
+               "memory": memory.digest(ctx["_ledger"]), "winners": ctx["_ledger"].kv_get("winners") or "none yet"}
     except Exception:
         pass
     prompt = _fill(_load_prompt(prompt_file), ctx)
@@ -112,7 +114,7 @@ def canned(prompt_file: str, ctx: dict) -> dict:
                 f"Leg {leg:02d}: Every sol without a new listing is a sol lost. Launch Bay posts twice; Comms keeps the reply window under 60 seconds.",
                 f"Leg {leg:02d}: Widen the front toward {nxt}. Research scouts a second product line; Prototype Cell stays on standby until it finds one worth building.",
                 f"Leg {leg:02d}: Protect the hull. No boosts this leg; incidents reviewed within the hour; the similarity rule is not negotiable."]
-        return {"summary": "Mission reviewed", "directive": random.choice(opts), "priorities": ["production", "research", "launch"]}
+        return {"summary": "Mission reviewed", "directive": random.choice(opts), "priorities": ["production", "research", "launch"], "note": random.choice(["", "", "Listings with a clear subject sell; abstract ones do not.", "Hold off boosts until the first real sale lands."])}
     if "reply" in prompt_file:
         m = ctx.get("message") or {}
         return {"summary": f"Reply drafted ({m.get('category','question')})", "category": m.get("category", "question"),

@@ -6,7 +6,7 @@ artifact: listing
 complete_msg: "Listing live: {title}"
 steps:
   - {id: trend_scan,    name: Trend scan,    kind: agent, agent: FORGE, prompt: etsy_trend.md}
-  - {id: design_draft,  name: Design draft,  kind: tool,  tool: images.generate, args: {prompt_from: trend_scan.design_prompt, n: 2}, agent: FORGE}
+  - {id: design_draft,  name: Design draft,  kind: tool,  tool: images.generate, args: {prompt_from: trend_scan.design_prompt, n: 2, variants: true}, agent: FORGE}
   - {id: mockup_build,  name: Mockup build,  kind: tool,  tool: printify.create_product, args: {products: [tee, mug, tote]}, agent: PRESS,
      gate: approve_spend, gate_summary: "Production wants to build mockups for \"{title}\" (print partner call, no fee)"}
   - {id: listing_draft, name: Listing draft, kind: agent, agent: MINT, prompt: etsy_listing.md}

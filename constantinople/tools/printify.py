@@ -9,7 +9,9 @@ API = "https://api.printify.com/v1"
 # Blueprint 6 = Gildan 5000 "Unisex Heavy Cotton Tee", the standard POD tee. Mugs/totes can be added later.
 BLUEPRINTS = {"tee": 6}
 PROVIDER_PREF = ["SwiftPOD", "Monster Digital", "Printify Choice", "Print Geek", "Underground Threads"]
-COLORS = {"White", "Black", "Natural", "Sand", "Sport Grey"}
+LIGHT = {"White", "Natural", "Sand", "Ash", "Ice Grey", "Light Blue", "Light Pink", "Sport Grey"}
+DARK = {"Black", "Navy", "Dark Heather", "Charcoal", "Forest Green", "Maroon"}
+COLORS = {"White", "Black", "Natural", "Sand", "Sport Grey", "Navy", "Dark Heather"}
 SIZES = ["S", "M", "L", "XL", "2XL"]
 PRICE_CENTS = {"S": 2495, "M": 2495, "L": 2495, "XL": 2495, "2XL": 2695}
 
@@ -41,17 +43,25 @@ async def create_product(ctx, *, design_from: str = "design_draft.files", produc
     import httpx
     files = _lookup(ctx, design_from) or []
     if not files: return {"summary": "no design file", "incident": "Mockup build skipped · no design file from Design draft", "cost": 0.0}
-    pick = (ctx.get("design_pick") or {}).get("index", 0)
-    design_path = files[min(pick, len(files) - 1)]
-    async with httpx.AsyncClient(timeout=120, headers=_hdr()) as c:
-        up = await c.post(f"{API}/uploads/images.json", json={"file_name": f"{ctx['run_id']}.png", "contents": _b64(design_path)})
-        if up.status_code >= 400: return {"summary": "upload failed", "incident": f"Print partner rejected the design upload · {up.status_code} {up.text[:120]}", "cost": 0.0}
-        image_id = up.json()["id"]
+    by_variant = (ctx.get("design_draft") or {}).get("by_variant") or {}
+    light_path = by_variant.get("light") or files[0]; dark_path = by_variant.get("dark") or light_path
+    async with httpx.AsyncClient(timeout=180, headers=_hdr()) as c:
+        ids = {}
+        for label, path in {"light": light_path, "dark": dark_path}.items():
+            if path in ids.values(): continue
+            up = await c.post(f"{API}/uploads/images.json", json={"file_name": f"{ctx['run_id']}_{label}.png", "contents": _b64(path)})
+            if up.status_code >= 400: return {"summary": "upload failed", "incident": f"Print partner rejected the design upload · {up.status_code} {up.text[:120]}", "cost": 0.0}
+            ids[label] = up.json()["id"]
+        light_id = ids.get("light"); dark_id = ids.get("dark", light_id)
         provider, variants = await _pick_provider_and_variants(c, BLUEPRINTS["tee"])
-        vids = [v["id"] for v in variants]
+        light_v = [v["id"] for v in variants if v.get("options", {}).get("color") not in DARK]
+        dark_v = [v["id"] for v in variants if v.get("options", {}).get("color") in DARK]
+        areas = []
+        if light_v: areas.append({"variant_ids": light_v, "placeholders": [{"position": "front", "images": [{"id": light_id, "x": 0.5, "y": 0.4, "scale": 0.85, "angle": 0}]}]})
+        if dark_v: areas.append({"variant_ids": dark_v, "placeholders": [{"position": "front", "images": [{"id": dark_id, "x": 0.5, "y": 0.4, "scale": 0.85, "angle": 0}]}]})
         body = {"title": concept.title()[:140], "description": f"{concept}. Made to order.", "blueprint_id": BLUEPRINTS["tee"], "print_provider_id": provider["id"],
                 "variants": [{"id": v["id"], "price": PRICE_CENTS.get(v.get("options", {}).get("size", "M"), 2495), "is_enabled": True} for v in variants],
-                "print_areas": [{"variant_ids": vids, "placeholders": [{"position": "front", "images": [{"id": image_id, "x": 0.5, "y": 0.4, "scale": 0.85, "angle": 0}]}]}]}
+                "print_areas": areas}
         r = await c.post(f"{API}/shops/{config.PRINTIFY_SHOP_ID}/products.json", json=body)
         if r.status_code >= 400: return {"summary": "product create failed", "incident": f"Print partner could not create the product · {r.status_code} {r.text[:160]}", "cost": 0.0}
         p = r.json()

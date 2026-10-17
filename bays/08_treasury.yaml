@@ -1,5 +1,6 @@
 id: treasury
 name: TREASURY
+no_complete: true
 agents: [VAULT]
 cadence_seconds: 900           # collect receipts every 15 min
 steps:
@@ -8,3 +9,4 @@ steps:
   - {id: collect2,  name: Etsy receipts, kind: tool, quiet: true, tool: etsy.poll_receipts}
   - {id: record2,   name: Reconcile Etsy, kind: tool, quiet: true, tool: treasury.record_sales, args: {sales_from: collect2.sales, bay: etsy, only_if_no_printify: true}}
   - {id: mirror,    name: Cost mirror, kind: tool, tool: treasury.reconcile}
+  - {id: stats,     name: Listing stats, kind: tool, quiet: true, tool: etsy.listing_stats}

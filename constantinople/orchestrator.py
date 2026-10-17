@@ -6,6 +6,7 @@ from . import config
 from .ledger import Ledger
 from .workflow import Bay, Runner, Hold, Rejected, Incident
 from .mother import Mother
+from .telegram import Telegram
 from . import mission
 
 log = logging.getLogger("constantinople")
@@ -21,12 +22,14 @@ class Orchestrator:
         self.tasks: list[asyncio.Task] = []
         self.mother = Mother(ledger, self)
         self.runner.mother = self.mother
+        self.telegram = Telegram(ledger, self)
 
     async def start(self):
         self.ledger.emit("core", "status", f"{config.STATION_NAME} engine online · {len(self.bays)} bays loaded · {'DRY RUN' if config.DRY_RUN else 'LIVE'}", agent=config.CALLSIGN)
         st = mission.state(self.ledger)
         self.ledger.emit("core", "mission", f"Prime mission active · leg {st['leg']:02d} of {st['legs']} · ${st['banked']:,.2f} banked · next waypoint {st['next_waypoint']['name']} ({mission.short(st['next_waypoint']['amount'])})", agent=config.MOTHER_NAME)
         await self.mother.start()
+        await self.telegram.start()
         for b in self.bays.values():
             self.tasks.append(asyncio.create_task(self._loop(b), name=b.id))
         self.tasks.append(asyncio.create_task(self._heartbeat()))

@@ -7,7 +7,9 @@ async def send(ctx, *, reply_from: str = "draft_reply.reply", dry_run: bool = Tr
     m = ctx.get("message") or {}
     if dry_run:
         return {"sent": True, "cost": 0.0, "summary": f"Reply sent to {m.get('platform','?')} buyer ({len(reply)} chars)"}
-    return {"sent": False, "cost": 0.0, "summary": "send not configured for this platform"}
+    # Etsy conversations cannot be answered by API or email: hand the draft to the Creator (Telegram shows it with a copy box)
+    ctx["_ledger"].emit("comms", "reply", f"Draft ready for {m.get('from','buyer')} · \"{reply[:80]}…\"", agent="HERALD", run_id=ctx["run_id"], draft=reply, to_buyer=m.get("from"))
+    return {"sent": False, "cost": 0.0, "summary": f"Reply drafted for {m.get('from','buyer')} · sent to {config.CREATOR} to paste into Etsy"}
 
 def _lookup(ctx, path):
     cur = ctx
