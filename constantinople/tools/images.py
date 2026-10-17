@@ -31,8 +31,10 @@ async def generate(ctx, *, prompt_from: str = "", n: int = 4, size: str = "1024x
     async with httpx.AsyncClient(timeout=120) as c:
         r = await c.post("https://api.openai.com/v1/images/generations",
                          headers={"Authorization": f"Bearer {config.IMAGE_API_KEY}"},
-                         json={"model": "gpt-image-1", "prompt": prompt, "n": n, "size": size})
-        r.raise_for_status()
+                         json={"model": "gpt-image-1", "prompt": prompt + " Isolated artwork for printing on a shirt: transparent background, no mockup, no shirt, no frame, no text unless asked.",
+                               "n": n, "size": size, "quality": "medium", "background": "transparent", "output_format": "png"})
+        if r.status_code >= 400:
+            return {"summary": "render failed", "incident": f"Image provider error · {r.status_code} {r.text[:140]}", "cost": 0.0}
         for i, d in enumerate(r.json()["data"]):
             p = OUT / f"{ctx['run_id']}_{i}.png"; p.write_bytes(base64.b64decode(d["b64_json"])); files.append(str(p))
     return {"files": files, "prompt": prompt, "cost": config.IMAGE_COST_USD * n, "summary": f"{n} variants rendered"}

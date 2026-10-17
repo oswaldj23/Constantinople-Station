@@ -11,4 +11,6 @@ async def scan(ctx, *, categories=None, sample: int = 200, dry_run: bool = True,
         listings = [{"category": c, "price": round(random.uniform(14, 44), 2), "favorites_7d": random.randint(0, 220), "reviews": random.randint(0, 900)}
                     for c in cats for _ in range(sample // len(cats))]
         return {"listings": listings, "count": len(listings), "cost": 0.0, "summary": f"{len(listings)} listings sampled across {len(cats)} categories"}
-    raise NotImplementedError("Add a marketplace search client here (respect robots.txt and the platform's API terms).")
+    # No live scanner yet: hand SCOUT the category list and let it rank from what it knows about these niches.
+    # (A real scanner that samples marketplace search results can be added here; respect each platform's API terms.)
+    return {"listings": [], "categories": cats, "count": 0, "cost": 0.0, "summary": f"no live scanner · SCOUT ranking {len(cats)} evergreen categories from knowledge"}
