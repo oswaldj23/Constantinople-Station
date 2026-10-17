@@ -37,7 +37,7 @@ That registers a scheduled task that starts the station when you log in, restart
 **On a server (recommended)** — one line on a fresh Ubuntu machine, as root:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/REPO_OWNER/constantinople-station/main/deploy.sh | bash
+curl -fsSL https://raw.githubusercontent.com/oswaldj23/constantinople-station/main/deploy.sh | bash
 ```
 
 It asks four questions (station name, your name, Mother's autonomy, daily cap), installs everything under `/opt/constantinople`, locks the firewall to SSH + Tailscale, and registers a `constantinople` service that restarts on crash and on reboot. Afterwards: `bash /opt/constantinople/station.sh status|logs|approvals|approve N|env`, and `bash /opt/constantinople/update.sh` to pull new code.

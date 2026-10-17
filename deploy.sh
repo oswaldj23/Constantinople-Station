@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # One-line server install for Constantinople Station (Ubuntu 22.04/24.04, run as root):
-#   curl -fsSL https://raw.githubusercontent.com/REPO_OWNER/constantinople-station/main/deploy.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/oswaldj23/constantinople-station/main/deploy.sh | bash
 # Installs Python + git, pulls the code to /opt/constantinople, creates .env (asks a few questions),
 # locks the firewall to SSH + Tailscale, and registers the engine as a service that survives reboots.
 set -euo pipefail
-REPO="${REPO:-https://github.com/REPO_OWNER/constantinople-station.git}"
+REPO="${REPO:-https://github.com/oswaldj23/constantinople-station.git}"
 DIR=/opt/constantinople
 ask(){ local p="$1" d="$2" v; read -r -p "$p [$d]: " v </dev/tty || true; echo "${v:-$d}"; }
 
