@@ -25,6 +25,8 @@ PRINTIFY_SHOP_ID  = os.getenv("PRINTIFY_SHOP_ID") or None
 ETSY_API_KEY      = os.getenv("ETSY_API_KEY") or None
 ETSY_ACCESS_TOKEN = os.getenv("ETSY_ACCESS_TOKEN") or None
 ETSY_SHOP_ID      = os.getenv("ETSY_SHOP_ID") or None
+ETSY_REFRESH_TOKEN = os.getenv("ETSY_REFRESH_TOKEN") or None
+ETSY_TOKEN_EXPIRES = int(os.getenv("ETSY_TOKEN_EXPIRES") or 0)
 
 STATION_NAME   = os.getenv("STATION_NAME", "Constantinople Station")
 CALLSIGN       = os.getenv("CALLSIGN", STATION_NAME.split()[0].upper())

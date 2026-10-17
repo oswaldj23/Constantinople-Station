@@ -6,6 +6,7 @@
   python -m constantinople approvals              list pending gates
   python -m constantinople approve 3 | reject 3   decide a gate
   python -m constantinople tail                   print the event stream
+  python -m constantinople etsy-auth              one-time Etsy login (stores tokens in .env)
 """
 import argparse, asyncio, json, sys
 
@@ -23,9 +24,12 @@ def main(argv=None):
     p = sub.add_parser("approve"); p.add_argument("id", type=int)
     p = sub.add_parser("reject"); p.add_argument("id", type=int)
     sub.add_parser("tail")
+    sub.add_parser("etsy-auth")
     a = ap.parse_args(argv)
     base = f"http://{config.HOST}:{config.PORT}"
 
+    if a.cmd == "etsy-auth":
+        from .etsy_auth import main as etsy_auth; etsy_auth(); return
     if a.cmd == "serve":
         from .server import main as serve; serve(); return
     if a.cmd == "once":
