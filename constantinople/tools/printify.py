@@ -46,3 +46,28 @@ def _lookup(ctx, path):
 
 def _b64(path):
     import base64; return base64.b64encode(open(path, "rb").read()).decode()
+
+
+async def poll_orders(ctx, *, dry_run: bool = True, **_):
+    """Real sales without Etsy's API: every order placed in the connected Etsy shop shows up in Printify.
+    Returns only orders not seen before (tracked in the ledger), as sales for Treasury to record."""
+    if dry_run or not config.PRINTIFY_API_KEY:
+        n = random.choice([0, 0, 1, 1, 2])
+        sales = [{"receipt_id": f"pf{random.randint(10**7, 10**8)}", "amount": random.choice([14.99, 22.0, 24.95, 27.99, 34.0]), "title": random.choice(["garden era floral tee", "moon phase mug", "cozy book club sweatshirt"])} for _ in range(n)]
+        return {"sales": sales, "cost": 0.0, "summary": f"{len(sales)} new order(s)"}
+    import httpx
+    L = ctx.get("_ledger"); seen = set((L.kv_get("printify_seen") or "").split(",")) if L else set()
+    sales = []
+    async with httpx.AsyncClient(timeout=60, headers={"Authorization": f"Bearer {config.PRINTIFY_API_KEY}"}) as c:
+        r = await c.get(f"{API}/shops/{config.PRINTIFY_SHOP_ID}/orders.json", params={"limit": 50}); r.raise_for_status()
+        for o in r.json().get("data", []):
+            oid = str(o["id"])
+            if oid in seen or o.get("status") in ("canceled",): continue
+            seen.add(oid)
+            # merchant revenue = what the buyer paid for items (cents); print cost is deducted separately by Printify
+            amount = sum(li.get("metadata", {}).get("price", 0) * li.get("quantity", 1) for li in o.get("line_items", [])) / 100
+            title = (o.get("line_items") or [{}])[0].get("metadata", {}).get("title", "order")
+            cost = (o.get("total_price", 0) or 0) / 100  # what Printify charges us for printing+shipping
+            sales.append({"receipt_id": oid, "amount": amount, "title": title, "print_cost": cost})
+    if L: L.kv_set("printify_seen", ",".join(sorted(seen)[-500:]))
+    return {"sales": sales, "cost": 0.0, "summary": f"{len(sales)} new order(s) from the shop"}

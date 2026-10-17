@@ -40,7 +40,7 @@ MAX_RETRIES    = int(os.getenv("MAX_RETRIES", "3"))
 def integrations() -> dict:
     """What is actually wired up, for the dashboard's setup checklist."""
     return {"model": bool(ANTHROPIC_API_KEY), "images": IMAGE_PROVIDER if IMAGE_PROVIDER != "none" and IMAGE_API_KEY else None,
-            "printify": bool(PRINTIFY_API_KEY and PRINTIFY_SHOP_ID), "etsy": bool(ETSY_ACCESS_TOKEN and ETSY_SHOP_ID),
+            "printify": bool(PRINTIFY_API_KEY and PRINTIFY_SHOP_ID), "etsy": bool(ETSY_ACCESS_TOKEN and ETSY_SHOP_ID), "etsy_pending": bool(ETSY_API_KEY and not ETSY_ACCESS_TOKEN),
             "fiverr": False, "dry_run": DRY_RUN, "auto_approve": AUTO_APPROVE,
             "autonomy": AUTONOMY, "daily_cap": DAILY_SPEND_CAP, "mother": MOTHER_NAME, "creator": CREATOR}
 

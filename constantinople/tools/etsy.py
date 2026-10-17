@@ -22,6 +22,8 @@ def _headers():
     return {"x-api-key": config.ETSY_API_KEY, "Authorization": f"Bearer {config.ETSY_ACCESS_TOKEN}"}
 
 async def poll_receipts(ctx, *, dry_run: bool = True, **_):
+    if not dry_run and not config.ETSY_ACCESS_TOKEN:
+        return {"sales": [], "cost": 0.0, "summary": "Etsy API not linked yet; sales come via Printify"}
     if dry_run or not config.ETSY_ACCESS_TOKEN:
         n = random.choice([0, 0, 1, 1, 2])
         sales = [{"receipt_id": random.randint(10**9, 10**10), "amount": random.choice([14.99, 22.0, 24.95, 27.99, 34.0, 44.0]),

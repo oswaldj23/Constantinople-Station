@@ -48,7 +48,7 @@ For unattended running set `AUTONOMY=full` and a `DAILY_SPEND_CAP` you are comfo
 
 ## Where the money comes from (and where it doesn't)
 
-In dry run, `tools/etsy.poll_receipts` and `tools/fiverr.poll_inbox` **invent** sales and orders so the whole ship can be exercised. The dashboard marks these figures SIMULATED. A real dollar enters the ledger in exactly three ways: Etsy's receipts API (needs `ETSY_ACCESS_TOKEN`, `DRY_RUN=false`), an order posted to `/inbound/order` that the Studio delivers, or a sale you post to `/inbound/sale`. Nothing else can create revenue. If the number on the HUD is not backed by one of those, it is not real.
+In dry run, `tools/etsy.poll_receipts` and `tools/fiverr.poll_inbox` **invent** sales and orders so the whole ship can be exercised. The dashboard marks these figures SIMULATED. A real dollar enters the ledger in exactly three ways: orders seen by Printify from the connected shop (`DRY_RUN=false`; Etsy's own receipts API is an optional second source once `etsy-auth` is done), an order posted to `/inbound/order` that the Studio delivers, or a sale you post to `/inbound/sale`. Nothing else can create revenue. If the number on the HUD is not backed by one of those, it is not real.
 
 ## Make it yours
 
