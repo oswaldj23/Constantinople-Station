@@ -1045,11 +1045,12 @@ const BOOT_LINES=[[S.ident.name+' OS v0.1 · bridge terminal',''],['Prime missio
   if(bootOn){ const e=document.createElement('div'); e.className='enter'; e.textContent='[ TAP OR PRESS ANY KEY TO ENTER STATION ]'; scr.appendChild(e); setTimeout(endBoot,4500); }
 })();
 function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
-function endBoot(){ if(!bootOn) return; bootOn=false; $('#boot').classList.add('off'); t0=performance.now()/1000; renderHUD(); event({bay:'core',kind:'status',agent:S.ident.sign,msg:'Bridge terminal online · all bays reporting'}); const m=missionState(); event({bay:'core',kind:'mission',agent:'MOTHER',msg:`Prime mission active · leg ${pad(m.li+1)} of 10 · ${money(S.totals.rev)} banked · next waypoint ${m.name} (${short$(m.next)})`}); }
+function endBoot(){ if(!bootOn) return; bootOn=false; $('#boot').classList.add('off'); t0=performance.now()/1000; renderHUD(); const willConnect = !!(store.get('src','')||$('#srcUrl').getAttribute('value')); if(!willConnect){ event({bay:'core',kind:'status',agent:S.ident.sign,msg:'Bridge terminal online · all bays reporting'}); const m=missionState(); event({bay:'core',kind:'mission',agent:'MOTHER',msg:`Prime mission active · leg ${pad(m.li+1)} of 10 · ${money(S.totals.rev)} banked · next waypoint ${m.name} (${short$(m.next)})`}); } }
 $('#boot').addEventListener('click',endBoot); window.addEventListener('keydown',e=>{ if(bootOn){endBoot();return;} if(e.key==='Escape'){ closePanel(); if(S.view!=='map') showView('map'); } });
 
 // ───────────────────────────── start ─────────────────────────────
 const saved=store.get('src','')||$('#srcUrl').getAttribute('value')||''; // the engine injects a default when it serves this page
+if(saved){ for(const b of BAYS){ S.bays[b.id].rev=0; S.bays[b.id].cost=0; S.bays[b.id].outputs=[]; } S.totals.rev=0; S.totals.cost=0; S.listings=0; S.orders=0; S.replies=0; S.replySum=0; S.mission.li=0; renderHUD(); }
 applyIdent(); S.mission.li=missionState().li; (()=>{ const bar=$('#hMisBar'); for(let i=1;i<10;i++){ const b=document.createElement('b'); b.style.setProperty('--x',(i/9*100)+'%'); bar.appendChild(b);} })();
 resize(); renderHUD(); requestAnimationFrame(frame);
 if(saved){ setTimeout(()=>connect(saved),1500); }
