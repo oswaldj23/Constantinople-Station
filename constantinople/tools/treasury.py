@@ -1,8 +1,10 @@
 """Treasury tools: record sales pulled by other bays, and reconcile."""
 from .. import config
 
-async def record_sales(ctx, *, sales_from: str = "collect.sales", bay: str = "etsy", dry_run: bool = True, **_):
+async def record_sales(ctx, *, sales_from: str = "collect.sales", bay: str = "etsy", only_if_no_printify: bool = False, dry_run: bool = True, **_):
     sales = _lookup(ctx, sales_from) or []
+    if only_if_no_printify and not dry_run and config.PRINTIFY_API_KEY:
+        return {"recorded": 0, "total": 0.0, "cost": 0.0, "summary": f"{len(sales)} Etsy receipt(s) seen · already counted via Printify"}
     total = 0.0
     for s in sales:
         ctx["_ledger"].emit(bay, "sale", f"Sale ${s['amount']:.2f} · {s.get('title','')}", agent="VAULT", amount=s["amount"], run_id=ctx["run_id"])

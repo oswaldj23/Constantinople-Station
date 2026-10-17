@@ -6,5 +6,5 @@ steps:
   - {id: collect,   name: Collect,     kind: tool, tool: printify.poll_orders}
   - {id: record,    name: Reconcile,   kind: tool, tool: treasury.record_sales, args: {sales_from: collect.sales, bay: etsy}}
   - {id: collect2,  name: Etsy receipts, kind: tool, quiet: true, tool: etsy.poll_receipts}
-  - {id: record2,   name: Reconcile Etsy, kind: tool, quiet: true, tool: treasury.record_sales, args: {sales_from: collect2.sales, bay: etsy}}
+  - {id: record2,   name: Reconcile Etsy, kind: tool, quiet: true, tool: treasury.record_sales, args: {sales_from: collect2.sales, bay: etsy, only_if_no_printify: true}}
   - {id: mirror,    name: Cost mirror, kind: tool, tool: treasury.reconcile}
