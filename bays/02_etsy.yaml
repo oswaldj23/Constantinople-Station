@@ -1,0 +1,15 @@
+id: etsy
+name: ETSY PRODUCTION BAY
+agents: [FORGE, MINT, PRESS]
+cadence_seconds: 5400          # a new listing every 90 minutes while running
+artifact: listing
+complete_msg: "Listing live: {title}"
+steps:
+  - {id: trend_scan,    name: Trend scan,    kind: agent, agent: FORGE, prompt: etsy_trend.md}
+  - {id: design_draft,  name: Design draft,  kind: tool,  tool: images.generate, args: {prompt_from: trend_scan.design_prompt, n: 4}, agent: FORGE}
+  - {id: mockup_build,  name: Mockup build,  kind: tool,  tool: printify.create_product, args: {products: [tee, mug, tote]}, agent: PRESS,
+     gate: approve_spend, gate_summary: "Production wants to build mockups for \"{title}\" (print partner call, no fee)"}
+  - {id: listing_draft, name: Listing draft, kind: agent, agent: MINT, prompt: etsy_listing.md}
+  - {id: pub_sync,      name: Pub sync,      kind: tool,  tool: printify.publish, agent: PRESS,
+     gate: approve_publish, gate_summary: "Production wants to publish \"{title}\" to Etsy ($0.20 listing fee)", emit: publish, transfer_to: launch}
+  - {id: ledger,        name: Ledger,        kind: noop,  summary: "SKU costed and mirrored to Treasury", agent: PRESS}

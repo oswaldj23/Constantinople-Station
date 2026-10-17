@@ -1,0 +1,11 @@
+id: launch
+name: LAUNCH BAY
+agents: [BEACON, CLIP]
+cadence_seconds: 7200          # a post every two hours
+complete_msg: "Posted: {title}"
+steps:
+  - {id: queue,    name: Queue,    kind: noop,  summary: "Queue reviewed", agent: BEACON}
+  - {id: caption,  name: Caption,  kind: agent, agent: CLIP, prompt: launch_caption.md}
+  - {id: schedule, name: Schedule, kind: tool,  tool: publish.schedule, agent: BEACON, gate: approve_publish, gate_summary: "Launch Bay wants to schedule a post: {title}"}
+  - {id: post,     name: Post,     kind: noop,  summary: "Posted", emit: publish, agent: BEACON}
+  - {id: metrics,  name: Metrics,  kind: tool,  tool: publish.metrics, agent: BEACON}

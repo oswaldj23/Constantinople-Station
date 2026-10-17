@@ -1,0 +1,11 @@
+id: core
+name: CONSTANTINOPLE CORE
+quiet: true
+agents: [MOTHER]
+cadence_seconds: 600
+steps:
+  - {id: route,    name: Route signals,   kind: noop, quiet: true, summary: "Signals routed to owning bays"}
+  - {id: doctrine, name: Enforce doctrine, kind: noop, quiet: true, summary: "Doctrine checks passed"}
+  - {id: mirror,   name: Mirror ledger,   kind: tool, quiet: true, tool: treasury.reconcile}
+  - {id: mission_review, name: Mission review, kind: agent, quiet: true, agent: MOTHER, prompt: mission_review.md}
+  - {id: directive, name: Publish directive, kind: tool, quiet: true, tool: treasury.publish_directive}

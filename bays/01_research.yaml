@@ -1,0 +1,10 @@
+id: research
+name: RESEARCH LAB
+agents: [SCOUT]
+cadence_seconds: 3600          # one scan an hour
+artifact: brief
+complete_msg: "Brief handed to Production: {title}"
+steps:
+  - {id: market_scan,   name: Market scan,    kind: tool,  tool: research.scan, args: {sample: 200}}
+  - {id: demand_rank,   name: Demand ranking, kind: agent, agent: SCOUT, prompt: research_rank.md, share: research, emit: trend}
+  - {id: brief_handoff, name: Brief handoff,  kind: noop,  summary: "Brief shared with Production Bay", transfer_to: etsy}

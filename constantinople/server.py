@@ -1,0 +1,161 @@
+"""HTTP surface: the dashboard connects to /events (Server-Sent Events) and posts bridge commands.
+Webhooks let the outside world push orders, messages and sales in.
+
+  GET  /events                      SSE stream; first message is a snapshot
+  GET  /state                       snapshot + recent events
+  GET  /archive?limit=200&bay=etsy  ledger query
+  GET  /approvals                   pending gates
+  POST /approvals/{id}/approve|reject
+  POST /bays/{id}/hold|boost|wake   bridge controls (the dashboard's HOLD/BOOST buttons call these)
+  POST /bays/{id}/run               start a run now
+  POST /inbound/order               {"niche":"finance","qty":3,"amount":105,"brief":"..."}   → Thumbnail Studio
+  POST /inbound/message             {"platform":"etsy","from":"buyer","text":"...","order_id":1}  → Comms Deck
+  POST /inbound/sale                {"amount":24.95,"title":"...","bay":"etsy"}               → Treasury
+  GET  /                            serves the dashboard
+"""
+import asyncio, json, logging
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, StreamingResponse
+
+from . import config
+from .ledger import Ledger
+from .orchestrator import Orchestrator
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+app = FastAPI(title="Constantinople engine", version="0.1.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+ledger = Ledger()
+orch = Orchestrator(ledger)
+subscribers: set[asyncio.Queue] = set()
+_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _fanout(ev: dict):
+    if _loop is None: return
+    d = orch.bays.get(ev.get("bay"))
+    if d and d.display != ev["bay"]:
+        ev = {**ev, "bay": d.display, "source_bay": ev["bay"]}
+    for q in list(subscribers):
+        _loop.call_soon_threadsafe(q.put_nowait, ev)
+
+
+@app.on_event("startup")
+async def _start():
+    global _loop
+    _loop = asyncio.get_running_loop()
+    ledger.subscribe(_fanout)
+    await orch.start()
+
+
+@app.on_event("shutdown")
+async def _stop():
+    await orch.stop()
+
+
+@app.get("/events")
+async def events(request: Request):
+    q: asyncio.Queue = asyncio.Queue()
+    subscribers.add(q)
+
+    async def gen():
+        try:
+            yield f"data: {json.dumps(ledger.snapshot())}\n\n"
+            for ev in reversed(ledger.recent(150)):
+                yield f"data: {json.dumps(ev)}\n\n"
+            while True:
+                if await request.is_disconnected(): break
+                try:
+                    ev = await asyncio.wait_for(q.get(), timeout=15)
+                    yield f"data: {json.dumps(ev)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            subscribers.discard(q)
+    return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/state")
+def state():
+    return {**ledger.snapshot(), "recent": ledger.recent(60), "bays_spec": {k: {"name": b.name, "steps": [s["name"] for s in b.steps], "agents": b.agents} for k, b in orch.bays.items()}}
+
+
+@app.get("/archive")
+def archive(limit: int = 200, bay: str | None = None, kind: str | None = None):
+    return ledger.recent(limit, bay, kind)
+
+
+@app.get("/artifacts")
+def artifacts(bay: str | None = None, limit: int = 20):
+    return ledger.artifacts(bay, limit)
+
+
+@app.get("/approvals")
+def approvals(status: str = "pending"):
+    return ledger.approvals(status)
+
+
+@app.get("/mother")
+def mother():
+    """What Mother has done lately, and what she is waiting on the Creator for."""
+    return {"name": config.MOTHER_NAME, "autonomy": config.AUTONOMY, "daily_cap": config.DAILY_SPEND_CAP, "spent_today": orch.mother.spent_today(),
+            "escalations": [a for a in ledger.approvals("pending") if a["gate"] == "escalation"], "recent": ledger.recent(40, kind="mother")}
+
+
+@app.post("/approvals/{aid}/{decision}")
+def decide(aid: int, decision: str):
+    if decision not in ("approve", "reject"): raise HTTPException(400, "approve|reject")
+    if not ledger.approval(aid): raise HTTPException(404)
+    orch.runner.decide(aid, "approved" if decision == "approve" else "rejected")
+    return {"ok": True, "id": aid, "status": decision}
+
+
+@app.post("/bays/{bay_id}/{action}")
+async def bay_action(bay_id: str, action: str):
+    if bay_id not in orch.bays: raise HTTPException(404, "unknown bay")
+    if action == "run":
+        asyncio.create_task(orch.run_once(bay_id)); return {"ok": True, "started": bay_id}
+    if action not in ("hold", "boost", "wake", "standby"): raise HTTPException(400, "hold|boost|wake|standby|run")
+    return {"ok": True, "status": orch.set_status(bay_id, action)}
+
+
+@app.post("/inbound/order")
+async def inbound_order(body: dict):
+    body.setdefault("order_id", f"FO{abs(hash(json.dumps(body, sort_keys=True))) % 10**8}")
+    ledger.emit("studio", "order", f"Order {body['order_id']}: {body.get('niche','?')} thumbnails ×{body.get('qty',1)} · ${float(body.get('amount',0)):.2f}", agent="RAY", amount=None)
+    await orch.runner.enqueue("studio", {"order": body}); return {"ok": True}
+
+
+@app.post("/inbound/message")
+async def inbound_message(body: dict):
+    ledger.emit("comms", "message", f"Inbound ({body.get('platform','?')}): \"{body.get('text','')[:120]}\"", agent="HERALD")
+    await orch.runner.enqueue("comms", {"message": body}); return {"ok": True}
+
+
+@app.post("/inbound/sale")
+async def inbound_sale(body: dict):
+    bay = body.get("bay", "etsy")
+    ledger.emit(bay, "sale", f"Sale ${float(body['amount']):.2f} · {body.get('title','')}", agent="VAULT", amount=float(body["amount"]))
+    return {"ok": True}
+
+
+@app.get("/", response_class=HTMLResponse)
+def dashboard():
+    p = config.DASH_DIR / "index.html"
+    if not p.exists(): return HTMLResponse("<p>dashboard/index.html missing</p>", 404)
+    body = p.read_text()
+    if "<html" not in body[:200]:
+        body = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body style="margin:0">' + body + "</body></html>"
+    return HTMLResponse(body.replace('placeholder="http://localhost:8787/events"', f'placeholder="http://{config.HOST}:{config.PORT}/events" value="/events"'))
+
+
+def main():
+    import uvicorn
+    uvicorn.run("constantinople.server:app", host=config.HOST, port=config.PORT, log_level="info")
+
+
+if __name__ == "__main__":
+    main()

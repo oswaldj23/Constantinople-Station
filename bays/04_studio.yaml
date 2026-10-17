@@ -1,0 +1,13 @@
+id: studio
+name: THUMBNAIL STUDIO
+agents: [LUMEN, RAY]
+trigger: event                 # runs when an order arrives (POST /inbound/order, CLI, or inbox poll)
+artifact: delivery
+complete_msg: "Delivered: {title}"
+steps:
+  - {id: order_intake, name: Order intake,  kind: noop,  summary: "Brief parsed, style refs pulled", agent: RAY}
+  - {id: prompt_build, name: Prompt build,  kind: agent, agent: LUMEN, prompt: thumbnail_prompt.md}
+  - {id: render_batch, name: Render batch,  kind: tool,  tool: images.generate, args: {prompt_from: prompt_build.prompt, n: 6, size: 1536x1024}, agent: LUMEN}
+  - {id: score,        name: Revision pass, kind: agent, agent: LUMEN, prompt: thumbnail_score.md}
+  - {id: deliver,      name: Deliver,       kind: tool,  tool: fiverr.package, agent: RAY}
+  - {id: ledger,       name: Ledger,        kind: tool,  tool: treasury.record_payout, args: {bay: studio}, agent: RAY}

@@ -1,0 +1,7 @@
+id: sound
+name: SOUND LAB
+agents: [VYBE]
+standby: true
+cadence_seconds: 86400
+steps:
+  - {id: brief,    name: Prompt brief,    kind: noop, summary: "No audio requested"}

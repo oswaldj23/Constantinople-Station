@@ -1,0 +1,9 @@
+id: comms
+name: COMMS DECK
+agents: [HERALD]
+trigger: event                 # one run per inbound message
+complete_msg: "Replied: {title}"
+steps:
+  - {id: classify,    name: Classify,    kind: noop,  summary: "Message classified", pause: 0.3}
+  - {id: draft_reply, name: Draft reply, kind: agent, agent: HERALD, prompt: comms_reply.md, pause: 0.3}
+  - {id: send,        name: Send,        kind: tool,  tool: comms.send, emit: reply, pause: 0.2}
