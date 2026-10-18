@@ -37,6 +37,15 @@ class Telegram:
         except Exception as e:
             log.warning("telegram send failed: %s", e)
 
+    async def send_photo_file(self, path: str, caption: str = ""):
+        if not self.enabled or not self.chat: return
+        try:
+            async with httpx.AsyncClient(timeout=60) as c:
+                with open(path, "rb") as fh:
+                    await c.post(f"{self.api}/sendPhoto", data={"chat_id": self.chat, "caption": caption[:1000]}, files={"photo": (path.split("/")[-1], fh, "image/png")})
+        except Exception as e:
+            log.warning("telegram photo file failed: %s", e)
+
     async def send_photo(self, url: str, caption: str = ""):
         if not self.enabled or not self.chat or not url: return
         try:
@@ -54,6 +63,16 @@ class Telegram:
             aid = ev["approval"]
             text = f"🛎 <b>Approval #{aid}</b>\n{msg.split(':',1)[1].strip()}"
             buttons = [[{"text": "✅ Approve", "callback_data": f"approve:{aid}"}, {"text": "❌ Reject", "callback_data": f"reject:{aid}"}]]
+            a = self.L.approval(aid)
+            try:
+                payload = json.loads(a.get("payload") or "{}") if a else {}
+                files = (payload.get("design_draft") or {}).get("files") or []
+                mocks = (payload.get("mockup_build") or {}).get("mockups") or []
+                async def _pics():
+                    for f in files[:2]: await self.send_photo_file(f, f"Design · {f.split('_')[-1].replace('.png','')} shirt version")
+                    for m in mocks[:2]: await self.send_photo(m, "Mockup")
+                self._loop.call_soon_threadsafe(lambda: asyncio.create_task(_pics()))
+            except Exception: pass
         elif k == "mother" and ("ESCALATED" in msg or "Declined" in msg):
             text = f"🚨 <b>MOTHER</b>\n{msg}"
         elif k == "mission" and "WAYPOINT REACHED" in msg:

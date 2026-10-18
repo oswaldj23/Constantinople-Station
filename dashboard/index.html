@@ -238,6 +238,11 @@ code{font-family:var(--mono);color:var(--ph-bright);background:rgba(61,255,115,.
 .appr .a .t{font-size:10.5px;color:var(--ph-text);line-height:1.4;min-width:0}
 .appr .a .t b{color:var(--amber);font-family:var(--display);font-size:16px;margin-right:6px}
 .appr .a .btns{display:flex;gap:4px}
+.appr .pics{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap}
+.appr .pics img{width:120px;height:120px;object-fit:contain;background:#fff;border:1px solid var(--ph-faint);image-rendering:auto}
+.appr .pics img.mock{background:#0b0f14;object-fit:cover}
+.out img{display:block;width:100%;aspect-ratio:1;object-fit:contain;background:#fff;border:1px solid var(--ph-faint)}
+.out img.dark{background:#111}
 .appr .a .btn{flex:0 0 auto;padding:5px 10px;min-height:0}
 .appr .a .btn.ok{border-color:var(--ph);color:var(--ph)} .appr .a .btn.no{border-color:var(--red);color:var(--red)}
 #dock .tab .badge.amber{background:var(--amber);color:#1a1000}
@@ -842,7 +847,7 @@ function renderHUD(){
 }
 
 // ───────────────────────────── bay panel ─────────────────────────────
-function selectBay(id){ S.selected=id; renderPanel(); $('#panel').classList.add('open'); beep(660); }
+function selectBay(id){ S.selected=id; renderPanel(); if(id==='etsy') fetchDesigns(); $('#panel').classList.add('open'); beep(660); }
 function closePanel(){ S.selected=null; $('#panel').classList.remove('open'); }
 function renderPanel(){
   const b=BY[S.selected]; if(!b) return; const st=S.bays[b.id];
@@ -883,8 +888,10 @@ function act(id,what){ const st=S.bays[id]; const held=store.get('hold',{}), boo
   store.set('hold',held); store.set('boost',boosted); beep(what==='hold'?330:880); renderPanelLive(); renderHUD();
   if(S.mode==='live'){ S.archive.shift(); S.events.pop(); postCtl(id,what); }
 }
+async function fetchDesigns(){ if(S.mode!=='live'||!S.srcUrl) return; const base=S.srcUrl.replace(/\/events\/?$/,''); try{ const r=await fetch(`${base}/designs`); if(r.ok){ S.designs=await r.json(); if(S.selected==='etsy') renderPanelOut(); } }catch(e){} }
 function renderPanelOut(){
   const b=BY[S.selected]; const st=S.bays[b.id]; const el=$('#pOut'); if(!(b.type==='production'||b.type==='studio')){ el.innerHTML=''; return; }
+  if(S.mode==='live' && b.type==='production'){ const base=S.srcUrl.replace(/\/events\/?$/,''); const ds=(S.designs||[]).slice(0,4); el.innerHTML=`<div class="sect">Latest designs · real</div>`+(ds.length?`<div class="outgrid">${ds.map(d=>`<div class="out"><a href="${base}${d.url}" target="_blank" rel="noopener"><img class="${d.variant==='dark'?'dark':''}" src="${base}${d.url}" alt="${esc(d.concept)}"></a><div class="t">${esc(d.concept)}</div><div class="m">${d.variant==='dark'?'dark shirt version':(d.variant==='light'?'light shirt version':d.variant)}</div></div>`).join('')}</div>`:'<div class="note dim">No designs rendered yet. The first run of this bay will put them here.</div>'); return; }
   const outs = st.outputs.length? st.outputs : seedOutputs(b);
   el.innerHTML=`<div class="sect">Latest output</div><div class="outgrid">${outs.map(()=>`<div class="out"><canvas width="${b.type==='production'?48:64}" height="${b.type==='production'?48:36}"></canvas><div class="t"></div><div class="m"></div></div>`).join('')}</div>`;
   el.querySelectorAll('.out').forEach((o,i)=>{ const d=outs[i]; const c=o.querySelector('canvas'); if(d.kind==='design') drawDesign(c,d.seed,d.title); else drawThumb(c,d.seed,d.title); o.querySelector('.t').textContent=d.title; o.querySelector('.m').textContent = d.kind==='design'?`${d.conf}% listing confidence`:`${d.conf}% click confidence`; });
@@ -1022,7 +1029,7 @@ function renderSetup(){ const I=S.mission.integrations; const items=[['Engine', 
   $('#setupList').innerHTML=items.map(([n,c,s])=>`<div class="it ${c}"><span>${n}</span><small>${s}</small></div>`).join(''); }
 let apprTimer=null;
 async function fetchApprovals(){ if(S.mode!=='live'||!S.srcUrl) return; const base=S.srcUrl.replace(/\/events\/?$/,''); try{ const r=await fetch(`${base}/approvals`); if(!r.ok) return; const rows=await r.json(); S.approvals=rows; const n=rows.length; const b=$('#apprBadge'); b.textContent=n||''; b.className='badge amber'; renderApprovals(); }catch(e){} }
-function renderApprovals(){ const wrap=$('#apprWrap'); const rows=S.approvals||[]; wrap.hidden=!(S.mode==='live'&&rows.length); if(wrap.hidden) return; $('#apprList').innerHTML=rows.map(a=>`<div class="a"><div class="t"><b>#${a.id}</b>${esc(a.summary)}<div class="note dim" style="margin-top:2px">${a.bay} · ${a.gate} · ${new Date(a.ts).toLocaleTimeString()}</div></div><div class="btns"><button class="btn ok" data-id="${a.id}" data-d="approve">Approve</button><button class="btn no" data-id="${a.id}" data-d="reject">Reject</button></div></div>`).join(''); $('#apprList').querySelectorAll('button').forEach(b=>b.onclick=async()=>{ const base=S.srcUrl.replace(/\/events\/?$/,''); b.disabled=true; try{ await fetch(`${base}/approvals/${b.dataset.id}/${b.dataset.d}`,{method:'POST'}); beep(b.dataset.d==='approve'?880:330); }catch(e){} fetchApprovals(); }); }
+function renderApprovals(){ const wrap=$('#apprWrap'); const rows=S.approvals||[]; wrap.hidden=!(S.mode==='live'&&rows.length); if(wrap.hidden) return; const base0=S.srcUrl.replace(/\/events\/?$/,''); $('#apprList').innerHTML=rows.map(a=>`<div class="a"><div class="t"><b>#${a.id}</b>${esc(a.summary)}<div class="note dim" style="margin-top:2px">${a.bay} · ${a.gate} · ${new Date(a.ts).toLocaleTimeString()}</div></div><div class="btns"><button class="btn ok" data-id="${a.id}" data-d="approve">Approve</button><button class="btn no" data-id="${a.id}" data-d="reject">Reject</button></div>${(a.images&&a.images.length)||(a.mockups&&a.mockups.length)?`<div class="pics">${(a.images||[]).map(u=>`<a href="${base0}${u}" target="_blank" rel="noopener"><img src="${base0}${u}" alt="design" title="${u.includes('_dark')?'dark shirt version':'light shirt version'}"></a>`).join('')}${(a.mockups||[]).slice(0,3).map(u=>`<a href="${u}" target="_blank" rel="noopener"><img class="mock" src="${u}" alt="mockup"></a>`).join('')}</div>`:''}</div>`).join(''); $('#apprList').querySelectorAll('button').forEach(b=>b.onclick=async()=>{ const base=S.srcUrl.replace(/\/events\/?$/,''); b.disabled=true; try{ await fetch(`${base}/approvals/${b.dataset.id}/${b.dataset.d}`,{method:'POST'}); beep(b.dataset.d==='approve'?880:330); }catch(e){} fetchApprovals(); }); }
 async function fetchListings(){ if(S.mode!=='live'||!S.srcUrl) return; const base=S.srcUrl.replace(/\/events\/?$/,''); try{ const r=await fetch(`${base}/listings`); if(r.ok){ S.listings=await r.json(); } }catch(e){} }
 function renderSettings(){ fetchApprovals(); renderApprovals(); $('#stName').value=S.ident.name; $('#stSign').value=S.ident.sign; renderSetup(); $('#srcUrl').value=store.get('src','')||$('#srcUrl').getAttribute('value')||''; $('#sndBtn').textContent='Sound: '+(S.sound?'on':'off'); $('#aboutBays').textContent=BAYS.map(b=>b.name.toLowerCase()).join(' · '); }
 $('#stSave').onclick=()=>{ const n=$('#stName').value.trim().toUpperCase()||'CONSTANTINOPLE STATION', g=$('#stSign').value.trim().toUpperCase()||n.split(' ')[0]; S.ident={name:n,sign:g}; store.set('ident',S.ident); applyIdent(); event({bay:'core',kind:'status',agent:g,msg:`Station registered as ${n} · call sign ${g}`}); beep(880); };

@@ -19,6 +19,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import config
 from .ledger import Ledger
@@ -30,6 +31,16 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 ledger = Ledger()
 orch = Orchestrator(ledger)
+(config.ROOT / "output" / "images").mkdir(parents=True, exist_ok=True)
+app.mount("/output", StaticFiles(directory=str(config.ROOT / "output")), name="output")
+
+
+def _img_urls(paths) -> list[str]:
+    out = []
+    for pth in paths or []:
+        pth = str(pth)
+        if "/output/" in pth: out.append("/output/" + pth.split("/output/", 1)[1])
+    return out
 subscribers: set[asyncio.Queue] = set()
 _loop: asyncio.AbstractEventLoop | None = None
 
@@ -98,7 +109,31 @@ def artifacts(bay: str | None = None, limit: int = 20):
 
 @app.get("/approvals")
 def approvals(status: str = "pending"):
-    return ledger.approvals(status)
+    rows = []
+    for a in ledger.approvals(status):
+        try: payload = json.loads(a.get("payload") or "{}")
+        except Exception: payload = {}
+        dd = payload.get("design_draft") or {}
+        a = {k: v for k, v in a.items() if k != "payload"}
+        a["images"] = _img_urls(dd.get("files"))
+        a["concept"] = (payload.get("trend_scan") or {}).get("concept") or (payload.get("listing_draft") or {}).get("title")
+        a["mockups"] = (payload.get("mockup_build") or {}).get("mockups") or []
+        rows.append(a)
+    return rows
+
+
+@app.get("/designs")
+def designs(limit: int = 12):
+    """Recent designs the crew rendered, newest first, with the concept they belong to."""
+    d = config.ROOT / "output" / "images"
+    files = sorted(d.glob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)[:limit * 2]
+    rows = []
+    for f in files:
+        run_id = f.stem.rsplit("_", 1)[0]
+        ev = ledger.db.execute("SELECT msg FROM events WHERE run_id=? AND kind='step' AND step=1 ORDER BY id LIMIT 1", (run_id,)).fetchone()
+        concept = ev["msg"].split(":", 1)[1].strip() if ev and ":" in ev["msg"] else run_id
+        rows.append({"url": f"/output/images/{f.name}", "run_id": run_id, "variant": f.stem.rsplit("_", 1)[-1], "concept": concept[:80], "ts": f.stat().st_mtime})
+    return rows[:limit]
 
 
 @app.get("/listings")
