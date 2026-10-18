@@ -98,6 +98,8 @@ def canned(prompt_file: str, ctx: dict) -> dict:
         return {"summary": f"Brief locked: {brief['concept']}", "concept": brief["concept"],
                 "design_prompt": f"flat hand-drawn illustration of a {brief['concept'].replace(' tee','').replace(' mug','')}, two-colour, cream and sage, lots of negative space, no text",
                 "products": ["tee", "mug", "tote"]}
+    if "listing_review" in prompt_file:
+        return {"summary": "Reviewed: ship it", "verdict": random.choice(["approve", "approve", "approve", "reject"]), "reason": "concept matches the brief; title is specific; disclosure present", "fixes": []}
     if "listing" in prompt_file:
         concept = (ctx.get("trend_scan") or {}).get("concept", name)
         return {"summary": f"Listing drafted: \"{concept.title()}\"", "title": f"{concept.title()} | Illustrated Gift Tee | Soft Unisex",
@@ -119,8 +121,6 @@ def canned(prompt_file: str, ctx: dict) -> dict:
         if "cap" in msg or "account" in msg or "payout" in msg: return {"action": "escalate", "reason": "money or account standing involved"}
         if "timeout" in msg or "rate limit" in msg or "latency" in msg or "network" in msg: return {"action": "retry" if n < 3 else "hold", "reason": "transient upstream failure"}
         return {"action": "watch", "reason": "logged; no repeat yet"}
-    if "listing_review" in prompt_file:
-        return {"summary": "Reviewed: ship it", "verdict": random.choice(["approve", "approve", "approve", "reject"]), "reason": "concept matches the brief; title is specific; disclosure present", "fixes": []}
     if "mission" in prompt_file:
         m = ctx.get("mission") or {}
         leg = m.get("leg", 1); nxt = (m.get("next_waypoint") or {}).get("name", "the next waypoint")
