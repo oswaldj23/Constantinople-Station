@@ -109,7 +109,7 @@ class Mother:
                 for b in self.orch.bays.values():
                     st = self.L.bay(b.id)
                     if st.get("status") not in ("running", "boost") or b.trigger == "event" or not st.get("last_run"): continue
-                    last = self.L.db.execute("SELECT MAX(ts) t FROM events WHERE bay=? AND kind='complete'", (b.id,)).fetchone()["t"]
+                    last = self.L.db.execute("SELECT MAX(ts) t FROM events WHERE bay=? AND kind IN ('complete','step','poll')", (b.id,)).fetchone()["t"]
                     if last:
                         age = (now - datetime.fromisoformat(last.replace("Z", "+00:00"))).total_seconds()
                         if age > 3 * b.cadence / config.SPEED + 60:
