@@ -61,7 +61,7 @@ async def run_agent(agent: str, prompt_file: str, ctx: dict, *, dry_run: bool) -
         from . import memory
         ctx = {**ctx, "mission": mission.state(ctx["_ledger"]), "station": config.STATION_NAME, "_bays": ctx["_ledger"].bays(),
                "memory": memory.digest(ctx["_ledger"]), "winners": ctx["_ledger"].kv_get("winners") or "none yet",
-               "mother": config.MOTHER_NAME, "recent_clips": [c["title"] for c in __import__("constantinople.tools.signal", fromlist=["recent_clips"]).recent_clips(ctx["_ledger"], 10)] or "none yet",
+               "mother": config.MOTHER_NAME, "assigned_format": __import__("constantinople.tools.signal", fromlist=["next_format"]).next_format(ctx["_ledger"]), "recent_clips": [c["title"] for c in __import__("constantinople.tools.signal", fromlist=["recent_clips"]).recent_clips(ctx["_ledger"], 10)] or "none yet",
                "latest_listing": (lambda a: {"title": a[0]["title"], "description": (a[0]["payload"].get("listing_draft") or {}).get("description", "")} if a else "none yet")(ctx["_ledger"].artifacts(kind_filter="listing", limit=1))}
     except Exception:
         pass
@@ -114,7 +114,7 @@ def canned(prompt_file: str, ctx: dict) -> dict:
         return {"summary": f"Script drafted for {niche} order", "title": f"The {niche} mistake everyone makes", "kind": "order", "genre": niche, "voiceover": " ".join(b["line"] for b in beats), "beats": beats, "caption": o.get("brief", "")[:180] or f"A {niche} short.", "hashtags": ["#shorts", f"#{niche.replace(' ', '')}"]}
     if "clip" in prompt_file:
         sig = ctx.get("signal") or {}; picks = sig.get("picks") or [{"genre": "scary stories", "format": "horror"}]; pk = random.choice(picks)
-        fmt = pk.get("format") or "horror"; g = pk.get("genre", "scary stories")
+        fmt = ctx.get("assigned_format") or pk.get("format") or "horror"; g = pk.get("genre", "scary stories")
         stories = {
             "horror": ("I found a second door in my apartment that isn't on the lease.", "A second door that isn't on the lease",
                        "I found a second door in my apartment that isn't on the lease. It's behind the water heater, painted the same beige as the wall, and the landlord swears the unit has one entrance. I only noticed because the cat sits in front of it every night at the same time. Last week I put a strip of tape across the gap at the bottom. In the morning the tape was on the floor, folded in half, neatly. I didn't open it. I bought a camera instead and pointed it at the door. The first night it recorded nothing for six hours, then the picture went black for four minutes. When it came back the cat was in the hallway, staring at the camera, not the door. Part two is on the channel.",
@@ -132,7 +132,7 @@ def canned(prompt_file: str, ctx: dict) -> dict:
                       "Five things about sleep that sound fake but aren't. One: you forget most of your dreams within ten minutes of waking. Two: humans are the only mammals that willingly delay sleep. Three: a cat sleeps roughly two thirds of its life. Four: before electric light, many people slept in two shifts with an hour awake in between. Five: the record for staying awake is eleven days, and the man who set it was a seventeen-year-old doing a school science project.",
                       None),
         }
-        if fmt == "product" or ("product" in prompt_file):
+        if fmt == "product":
             ll = ctx.get("latest_listing"); subject = (ll.get("title").split("|")[0].strip() if isinstance(ll, dict) and ll.get("title") else "the new design")
             beats = [{"line": f"This {subject.lower()} took three tries to get right.", "visual": f"the {subject} design flat on a cream tee"},
                      {"line": "The first one was too busy; nobody could read it from across a room.", "visual": "the design cropped tight"},

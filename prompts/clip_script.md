@@ -14,7 +14,7 @@ Shorts we already made (never repeat a premise):
 Our newest Etsy listing (ONLY for the rare "product" format, never mentioned in a story):
 {{latest_listing}}
 
-Pick a format from the brief's picks. Rotate: mostly stories, "product" at most one in six and only when the brief's product_angle asks for it.
+FORMAT FOR THIS SHORT (assigned by the station, mandatory): **{{assigned_format}}**. Do not choose another. Pick the genre from the brief's picks that fits it.
 - horror   — a first-person true-feeling scary story. Ordinary setting, one wrong detail, escalate, end on the image that stays with you. No gore, no real names, no real towns.
 - aita     — a first-person dilemma ("AITA for…"): what happened, what I did, why the other side is furious, end asking the viewer to judge.
 - revenge  — a petty-revenge or malicious-compliance story with a clean, satisfying payoff.
