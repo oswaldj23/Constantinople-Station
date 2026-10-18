@@ -3,7 +3,20 @@ bays/research.yaml and return raw listing samples for SCOUT to rank. Dry run ret
 import random
 from .. import config
 
-CATEGORIES = ["botanical tees", "cottagecore mugs", "cat mom sweatshirts", "hiking totes", "book club candles"]
+# Niche seeds: who buys print-on-demand gifts on Etsy, by identity, job, hobby, pet, humour and moment. SCOUT
+# picks from these (and beyond them) and must name the buyer, the recipient and the moment. Replaced by live
+# search demand once the Etsy API is approved.
+CATEGORIES = [
+    "dog mom / dog dad", "cat mom", "plant mom", "nurse", "teacher", "therapist / social worker", "accountant / tax season humour", "engineer", "truck driver",
+    "new mom / first Mother's Day", "grandma / nana", "dad jokes / grandpa", "bride / bridesmaid / bachelorette", "wedding anniversary",
+    "retirement", "graduation", "birthday milestones (30 / 40 / 50)", "retro 'Est. YEAR' birth year",
+    "hiking / national parks", "camping", "fishing", "golf", "pickleball", "running / marathon", "gym and lifting humour", "yoga", "cycling",
+    "reading / book lover", "crochet and knitting", "gardening", "baking / sourdough", "coffee addict", "tea lover", "wine o'clock", "beer and BBQ",
+    "gamer / cozy gaming", "D&D and tabletop (no brand names)", "horror movie fan (generic)", "true crime fan", "anime aesthetic (original, no characters)",
+    "cowgirl / western", "coastal / beach town", "lake life", "mountain town", "midwest / southern sayings", "city pride (no sports teams)",
+    "mental health / anxiety humour", "introvert humour", "sarcastic office humour", "christian faith / scripture", "spooky season", "cozy autumn", "christmas family matching",
+    "pride / ally", "neurodivergent pride", "nurse / teacher appreciation week", "sports mom (baseball, soccer, dance)", "homeschool mom", "small business owner",
+]
 
 async def scan(ctx, *, categories=None, sample: int = 200, dry_run: bool = True, **_):
     cats = categories or CATEGORIES
