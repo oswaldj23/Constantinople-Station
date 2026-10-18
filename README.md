@@ -66,9 +66,19 @@ It asks four questions (station name, your name, Mother's autonomy, daily cap), 
 
 For unattended running set `AUTONOMY=full` and a `DAILY_SPEND_CAP` you are comfortable losing on a bad day. Mother will handle everything inside those limits and park the rest in escalations for when you check in.
 
+## The Clip Forge and the Signal Deck
+
+The Forge makes vertical shorts two ways. **Own shorts** (`bays/03_clips.yaml`, three a day): REEL writes a 20–40 s script to the Signal Deck's brief — hook under eight words, 5–8 beats, each with a concrete visual — favouring our newest Etsy design when the brief says a product angle fits. VOX narrates it (OpenAI speech, `TTS_VOICE`) and gets word timings back from Whisper. CUT composes one 1080×1920 frame per beat from the listing's mockups and designs, AI b-roll stills, or a typographic card; renders with Ken Burns motion, crossfades, karaoke captions (each word brightens as it is spoken), a fade in and out, loudness-normalised audio and an optional music bed from `music/*.mp3` (drop in royalty-free loops; they are ducked under the voice). Mother reviews the script and render against five rules (hook up front, nothing copyrighted, 15–60 s, product shown or genre in the brief, no "like and subscribe"). Then it uploads to YouTube Shorts and the finished mp4 is sent to your Telegram so you can post it to TikTok from your phone (TikTok's posting API only allows private posts until an app is audited, so the phone is the honest route). Everything lands in `output/clips/<run>/` and in the Forge's archive.
+
+**Made-to-order shorts** (`bays/11_clip_orders.yaml`): a client order arrives through `POST /inbound/clip_order` (`{"niche","brief","cta","amount","images":[...]}`), the CLI (`python -m constantinople clip --niche "coffee shop" --brief "..." --cta "..."`) or Telegram (`/clip coffee shop | 30s about our new oat latte | Come find us on 5th St`). Same pipeline, packaged into `output/deliveries/<run>/` (mp4, thumbnail, script, caption) and the payout booked by Treasury at `CLIP_PRICE` (default $35). Sell it on Fiverr/Etsy as a service; the station does the work.
+
+The **Signal Deck** (`bays/12_signal.yaml`, DIAL) is the substation that watches the shorts market. Once a day it asks the YouTube Data API for the top short videos of the week in each of `SIGNAL_GENRES` (minecraft parkour, satisfying, asmr, … edit the list), reads how many were uploaded (supply), and scores each genre by demand per competing upload. It also pulls our own channel's numbers. DIAL ranks the three genres to make this sol, with the format that is winning and a hook each, and shares the brief with the Forge and Mother. Without a key it uses sample numbers and says so on the checklist.
+
+Setup: in Google Cloud create a project → enable **YouTube Data API v3** → Credentials → **API key** (`YOUTUBE_API_KEY`, scanning) and an **OAuth client ID, Desktop app** (`YOUTUBE_CLIENT_ID`/`SECRET`); then `python -m constantinople youtube-auth` once to link the channel. The scan spends ~1,700 of the 10,000 daily quota units; uploads cost 1,600 each, so three a day fits.
+
 ## Where the money comes from (and where it doesn't)
 
-In dry run, `tools/etsy.poll_receipts` and `tools/fiverr.poll_inbox` **invent** sales and orders so the whole ship can be exercised. The dashboard marks these figures SIMULATED. A real dollar enters the ledger in exactly three ways: orders seen by Printify from the connected shop (`DRY_RUN=false`; Etsy's own receipts API is an optional second source once `etsy-auth` is done), an order posted to `/inbound/order` that the Studio delivers, or a sale you post to `/inbound/sale`. Nothing else can create revenue. If the number on the HUD is not backed by one of those, it is not real.
+In dry run, `tools/etsy.poll_receipts` and `tools/fiverr.poll_inbox` **invent** sales and orders so the whole ship can be exercised. The dashboard marks these figures SIMULATED. A real dollar enters the ledger in exactly three ways: orders seen by Printify from the connected shop (`DRY_RUN=false`; Etsy's own receipts API is an optional second source once `etsy-auth` is done), an order posted to `/inbound/order` that the Studio delivers, a clip order delivered by the Forge, or a sale you post to `/inbound/sale`. Nothing else can create revenue. If the number on the HUD is not backed by one of those, it is not real.
 
 ## Make it yours
 
@@ -136,7 +146,8 @@ Step results accumulate in `ctx` under the step id, so later steps reference ear
 | Comms Deck | per message | classify → draft reply → send, under 90 s | messages in via `POST /inbound/message` or `tools/etsy.poll_messages` |
 | Treasury | every 15 min | pulls receipts, records sales, reconciles spend | Etsy OAuth token (`transactions_r`) |
 | Launch Bay | every 2 h | caption → schedule → post → metrics | a scheduler API in `tools/publish.py` |
-| Sound Lab, Prototype Cell | standby | wake from the dashboard when there is work | audio / coding agents |
+| Clip Forge | 3× a day + per order | script → voiceover → scenes → render → Mother's review → YouTube upload → TikTok handoff | OpenAI key (voice, b-roll), `youtube-auth` |
+| Signal Deck | daily | scans 16 shorts genres: top views, median, uploads/week, opportunity score → brief for the Forge | `YOUTUBE_API_KEY` |
 
 ## Hooking up the real thing
 
@@ -164,7 +175,8 @@ GET  /events                         SSE; first message is a snapshot, then the 
 GET  /state · /archive · /artifacts · /approvals
 POST /approvals/{id}/approve|reject
 POST /bays/{id}/hold|boost|wake|standby|run
-POST /inbound/order · /inbound/message · /inbound/sale
+POST /inbound/order · /inbound/message · /inbound/sale · /inbound/clip_order
+GET  /clips · /signal                the Forge's latest shorts, the Signal Deck's latest brief
 GET  /                               the dashboard
 ```
 

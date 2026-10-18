@@ -170,7 +170,7 @@ class Runner:
 
 
 def target_key(bay_id: str) -> str:
-    return {"studio": "order", "comms": "message", "treasury": "sale"}.get(bay_id, "input")
+    return {"studio": "order", "comms": "message", "treasury": "sale", "clip_orders": "clip_order"}.get(bay_id, "input")
 
 
 def _title(ctx: dict) -> str:
@@ -181,6 +181,10 @@ def _title(ctx: dict) -> str:
     dr = ctx.get("demand_rank")
     if isinstance(dr, dict) and isinstance(dr.get("brief"), dict) and dr["brief"].get("concept"):
         return dr["brief"]["concept"]
+    if isinstance(ctx.get("brief"), dict) and ctx["brief"].get("picks"):
+        return ", ".join(p.get("genre", "") for p in ctx["brief"]["picks"][:3])
+    if isinstance(ctx.get("script"), dict) and ctx["script"].get("title"):
+        return str(ctx["script"]["title"])
     for k in ("listing_draft", "trend_scan", "draft_reply", "caption"):
         v = ctx.get(k)
         if isinstance(v, dict):

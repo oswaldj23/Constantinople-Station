@@ -185,6 +185,31 @@ async def inbound_message(body: dict):
     await orch.runner.enqueue("comms", {"message": body}); return {"ok": True}
 
 
+@app.post("/inbound/clip_order")
+async def inbound_clip_order(body: dict):
+    """A paid made-to-order short: {"niche":"coffee shop","brief":"...","cta":"Visit us on 5th St","amount":35,"images":[...urls]}"""
+    body.setdefault("order_id", f"CO{abs(hash(json.dumps(body, sort_keys=True))) % 10**8}")
+    amt = float(body.get("amount") or config.CLIP_PRICE); body["amount"] = amt
+    ledger.emit("clips", "order", f"Clip order {body['order_id']}: {body.get('niche','?')} short · ${amt:.2f}", agent="REEL", amount=None)
+    await orch.runner.enqueue("clip_orders", {"clip_order": body}); return {"ok": True, "order_id": body["order_id"]}
+
+
+@app.get("/signal")
+def signal_brief():
+    from .tools import signal
+    return {"brief": signal.latest_brief(ledger), "clips": signal.recent_clips(ledger, 12)}
+
+
+@app.get("/clips")
+def clips_list(limit: int = 12):
+    from .tools import signal
+    rows = signal.recent_clips(ledger, limit)
+    for r in rows:
+        for k in ("file", "thumb"):
+            if r.get(k) and "/output/" in r[k]: r[k] = "/output/" + r[k].split("/output/", 1)[1]
+    return {"clips": rows}
+
+
 @app.post("/inbound/sale")
 async def inbound_sale(body: dict):
     bay = body.get("bay", "etsy")

@@ -46,6 +46,15 @@ class Telegram:
         except Exception as e:
             log.warning("telegram photo file failed: %s", e)
 
+    async def send_video_file(self, path: str, caption: str = ""):
+        if not self.enabled or not self.chat: return
+        try:
+            async with httpx.AsyncClient(timeout=300) as c:
+                with open(path, "rb") as fh:
+                    await c.post(f"{self.api}/sendVideo", data={"chat_id": self.chat, "caption": caption[:1000], "supports_streaming": "true"}, files={"video": ("short.mp4", fh, "video/mp4")})
+        except Exception as e:
+            log.warning("telegram video failed: %s", e)
+
     async def send_photo(self, url: str, caption: str = ""):
         if not self.enabled or not self.chat or not url: return
         try:
@@ -68,7 +77,9 @@ class Telegram:
                 payload = json.loads(a.get("payload") or "{}") if a else {}
                 files = (payload.get("design_draft") or {}).get("files") or []
                 mocks = (payload.get("mockup_build") or {}).get("mockups") or []
+                clip = (payload.get("render") or {}).get("file")
                 async def _pics():
+                    if clip: await self.send_video_file(clip, "Preview · the short waiting for approval")
                     for f in files[:2]: await self.send_photo_file(f, f"Design · {f.split('_')[-1].replace('.png','')} shirt version")
                     for m in mocks[:2]: await self.send_photo(m, "Mockup")
                 self._loop.call_soon_threadsafe(lambda: asyncio.create_task(_pics()))
@@ -81,6 +92,17 @@ class Telegram:
             text = f"💰 {msg}"
         elif k == "complete" and ev.get("bay") == "etsy":
             text = f"🛍 <b>Listing live</b> · {msg}"
+        elif k == "complete" and ev.get("bay") in ("clips", "clip_orders"):
+            # the finished short itself, so it can be posted to TikTok from the phone (TikTok's API is private-only until audited)
+            try:
+                from .tools import signal
+                rows = [c for c in signal.recent_clips(self.L, 3) if c.get("run_id") == ev.get("run_id")] or signal.recent_clips(self.L, 1)
+                if rows and rows[0].get("file"):
+                    c0 = rows[0]; cap = f"🎬 {msg}\n{c0.get('url') or ''}\nSave this and post it to TikTok. Caption and hashtags are in the Forge archive.".strip()
+                    self._loop.call_soon_threadsafe(lambda: asyncio.create_task(self.send_video_file(c0["file"], cap)))
+            except Exception as e:
+                log.warning("clip handoff: %s", e)
+            return
         elif k == "incident" and ev.get("bay") != "core" and config.TELEGRAM_VERBOSITY == "normal":
             text = f"⚠️ <b>{ev.get('bay','').upper()}</b> · {msg}"
         elif k == "reply" and ev.get("draft"):
@@ -136,7 +158,7 @@ class Telegram:
     async def command(self, text: str):
         parts = text.split(); cmd = parts[0].lower().lstrip("/"); arg = parts[1] if len(parts) > 1 else None
         if cmd in ("help", "h"):
-            await self.send("<b>Bridge commands</b>\n/status · /approvals · /approve N · /reject N\n/hold BAY · /boost BAY · /run BAY\n/report · /mother · /listings\n/quiet · /normal (how much I message you)")
+            await self.send("<b>Bridge commands</b>\n/status · /approvals · /approve N · /reject N\n/hold BAY · /boost BAY · /run BAY\n/report · /mother · /listings · /clips\n/clip NICHE | BRIEF | CTA  (order a short)\n/quiet · /normal (how much I message you)")
         elif cmd == "status":
             await self.send(self.status_text())
         elif cmd == "approvals":
@@ -158,6 +180,18 @@ class Telegram:
         elif cmd == "mother":
             rows = self.L.recent(8, kind="mother")
             await self.send("<b>MOTHER · recent decisions</b>\n" + "\n".join(f"• {r['msg'][:140]}" for r in rows) if rows else "No decisions yet.")
+        elif cmd == "clips":
+            from .tools import signal
+            rows = signal.recent_clips(self.L, 8); b = signal.latest_brief(self.L)
+            head = ("<b>Signal Deck</b> · " + ", ".join(p["genre"] for p in (b.get("picks") or [])[:3]) + "\n") if b else ""
+            await self.send(head + ("<b>Recent shorts</b>\n" + "\n".join(f"• {r['title'][:50]} · {r.get('duration') or 0:.0f}s{' · ' + r['url'] if r.get('url') else ''}" for r in rows) if rows else "No shorts cut yet."))
+        elif cmd == "clip":
+            raw = text.split(" ", 1)[1] if " " in text else ""
+            parts = [x.strip() for x in raw.split("|")]
+            if not parts or not parts[0]: await self.send("Usage: /clip NICHE | BRIEF | CTA\nExample: /clip coffee shop | 30s short about our new oat latte | Come find us on 5th St"); return
+            order = {"niche": parts[0], "brief": parts[1] if len(parts) > 1 else "", "cta": parts[2] if len(parts) > 2 else "Link in bio.", "amount": config.CLIP_PRICE, "order_id": f"TG{int(datetime.now().timestamp())%10**7}"}
+            self.L.emit("clips", "order", f"Clip order {order['order_id']}: {order['niche']} short · ${order['amount']:.2f}", agent="REEL")
+            await self.orch.runner.enqueue("clip_orders", {"clip_order": order}); await self.send(f"Order {order['order_id']} queued at the Forge. I'll send you the video when it's cut.")
         elif cmd == "listings":
             from . import memory
             rows = memory.listing_performance(self.L)[:10]

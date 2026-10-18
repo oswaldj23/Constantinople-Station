@@ -15,7 +15,7 @@ async def record_sales(ctx, *, sales_from: str = "collect.sales", bay: str = "et
 
 async def record_payout(ctx, *, bay: str = "studio", dry_run: bool = True, **_):
     """Record the payout for a delivered order (in dry run, immediately; live, when the platform clears it)."""
-    o = ctx.get("order") or {}
+    o = ctx.get("order") or ctx.get("clip_order") or {}
     amt = float(o.get("amount") or 0)
     if amt:
         ctx["_ledger"].emit(bay, "sale", f"Payout ${amt:.2f} · order {o.get('order_id','?')} delivered", agent="VAULT", amount=amt, run_id=ctx["run_id"])

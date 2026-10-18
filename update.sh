@@ -5,6 +5,7 @@ set -e
 cd /opt/constantinople
 git pull -q
 .venv/bin/pip install -q -r requirements.txt
+command -v ffmpeg >/dev/null || (apt-get update -qq && apt-get install -y -qq ffmpeg fonts-dejavu-core >/dev/null)
 # carry new keys from .env.example into .env with their defaults; never touch keys you already have
 added=0
 while IFS= read -r line; do

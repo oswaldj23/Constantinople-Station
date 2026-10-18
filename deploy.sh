@@ -10,7 +10,7 @@ ask(){ local p="$1" d="$2" v; read -r -p "$p [$d]: " v </dev/tty || true; echo "
 
 echo "== Constantinople Station · server install =="
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq && apt-get install -y -qq python3 python3-venv python3-pip git ufw >/dev/null
+apt-get update -qq && apt-get install -y -qq python3 python3-venv python3-pip git ufw ffmpeg fonts-dejavu-core >/dev/null
 
 if [ -d "$DIR/.git" ]; then git -C "$DIR" pull -q; else git clone -q "$REPO" "$DIR"; fi
 cd "$DIR"

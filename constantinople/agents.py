@@ -61,6 +61,7 @@ async def run_agent(agent: str, prompt_file: str, ctx: dict, *, dry_run: bool) -
         from . import memory
         ctx = {**ctx, "mission": mission.state(ctx["_ledger"]), "station": config.STATION_NAME, "_bays": ctx["_ledger"].bays(),
                "memory": memory.digest(ctx["_ledger"]), "winners": ctx["_ledger"].kv_get("winners") or "none yet",
+               "mother": config.MOTHER_NAME, "recent_clips": [c["title"] for c in __import__("constantinople.tools.signal", fromlist=["recent_clips"]).recent_clips(ctx["_ledger"], 10)] or "none yet",
                "latest_listing": (lambda a: {"title": a[0]["title"], "description": (a[0]["payload"].get("listing_draft") or {}).get("description", "")} if a else "none yet")(ctx["_ledger"].artifacts(kind_filter="listing", limit=1))}
     except Exception:
         pass
@@ -98,6 +99,36 @@ def canned(prompt_file: str, ctx: dict) -> dict:
         return {"summary": f"Brief locked: {brief['concept']}", "concept": brief["concept"],
                 "design_prompt": f"flat hand-drawn illustration of a {brief['concept'].replace(' tee','').replace(' mug','')}, two-colour, cream and sage, lots of negative space, no text",
                 "products": ["tee", "mug", "tote"]}
+    if "clip_review" in prompt_file:
+        r = ctx.get("render") or {}
+        ok = bool(r.get("file")) and 10 <= float(r.get("duration") or 0) <= 60
+        return {"summary": "Reviewed: post it" if ok else "Reviewed: hold it", "verdict": "approve" if ok else "reject", "reason": "hook up front, nothing copyrighted, length in range" if ok else "render missing or wrong length", "fixes": []}
+    if "clip_order" in prompt_file:
+        o = ctx.get("clip_order") or {}
+        niche = o.get("niche", "small business"); cta = o.get("cta", "Link in bio.")
+        beats = [{"line": f"Here is the one thing most {niche} videos get wrong.", "visual": f"a {niche} scene, soft light", "title": "ONE THING"},
+                 {"line": "They start with the explanation instead of the result.", "visual": f"close-up detail of {niche}"},
+                 {"line": "Show the finished thing first, then how it happened.", "visual": "before and after, split frame"},
+                 {"line": "Keep every sentence under ten words.", "visual": "bold caption card"},
+                 {"line": cta, "visual": "logo card on dark background"}]
+        return {"summary": f"Script drafted for {niche} order", "title": f"The {niche} mistake everyone makes", "kind": "order", "genre": niche, "voiceover": " ".join(b["line"] for b in beats), "beats": beats, "caption": o.get("brief", "")[:180] or f"A {niche} short.", "hashtags": ["#shorts", f"#{niche.replace(' ', '')}"]}
+    if "clip" in prompt_file:
+        sig = ctx.get("signal") or {}; picks = sig.get("picks") or [{"genre": "cozy aesthetic"}]; g = random.choice(picks)["genre"]
+        ll = ctx.get("latest_listing"); product = isinstance(ll, dict) and bool(ll.get("title"))
+        subject = (ll.get("title").split("|")[0].strip() if product else g)
+        beats = [{"line": f"This {subject.lower()} took three tries to get right.", "visual": f"the {subject} design flat on a cream tee" if product else f"a {g} scene in morning light", "title": "THREE TRIES"},
+                 {"line": "The first one was too busy; nobody could read it from across a room.", "visual": "the design cropped tight, lines and texture"},
+                 {"line": "The second lost the warmth we were after.", "visual": "two colour swatches side by side, cream and sage"},
+                 {"line": "The third kept the hand-drawn line and dropped everything else.", "visual": "final design, centred, lots of negative space"},
+                 {"line": "It prints to order and ships in three to five days.", "visual": "the tee folded on a wooden table"},
+                 {"line": f"It is live in the shop now; the name is {config.STATION_NAME.split()[0]}.", "visual": "shop name card on dark background"}]
+        return {"summary": f"Script drafted: {subject}", "title": f"{subject}: three tries to get it right", "kind": "product" if product else "genre", "genre": g,
+                "voiceover": " ".join(b["line"] for b in beats), "beats": beats, "caption": f"Made to order, shipped in 3-5 days. {config.STATION_NAME}.", "hashtags": ["#shorts", "#etsy", "#smallbusiness", "#handdrawn", "#" + g.replace(" ", "")]}
+    if "signal" in prompt_file:
+        rows = (ctx.get("shorts_scan") or {}).get("genres") or [{"genre": "cozy aesthetic", "top_views": 1000000, "supply": 100}]
+        picks = [{"genre": r["genre"], "format": "fast cuts, 3-word captions, hook in first second", "why": f"{r.get('top_views',0):,} top views vs {r.get('supply',0):,} uploads", "hook": f"Nobody tells you this about {r['genre']}"} for r in rows[:3]]
+        return {"summary": f"Picks: {', '.join(p['genre'] for p in picks)}", "picks": picks, "hooks": [p["hook"] for p in picks] + ["This took three tries", "The one thing most shops get wrong"],
+                "avoid": ["gameplay footage we do not own", "trending audio", "reposted clips"], "product_angle": "show the newest design on a tee for the first two seconds, then tell its story"}
     if "listing_review" in prompt_file:
         return {"summary": "Reviewed: ship it", "verdict": random.choice(["approve", "approve", "approve", "reject"]), "reason": "concept matches the brief; title is specific; disclosure present", "fixes": []}
     if "listing" in prompt_file:

@@ -48,6 +48,16 @@ REPORT_UTC_OFFSET  = int(os.getenv("REPORT_UTC_OFFSET", "-4"))  # New York in su
 MAIL_IMAP_HOST = os.getenv("MAIL_IMAP_HOST") or None           # e.g. imap.gmail.com
 MAIL_USER      = os.getenv("MAIL_USER") or None
 MAIL_PASSWORD  = os.getenv("MAIL_PASSWORD") or None            # Gmail: an App Password, not your login password
+# Clip Forge + Signal Deck
+TTS_VOICE      = os.getenv("TTS_VOICE", "onyx")                # OpenAI voices: alloy ash coral echo fable onyx nova sage shimmer
+TTS_MODEL      = os.getenv("TTS_MODEL", "gpt-4o-mini-tts")
+YOUTUBE_API_KEY       = os.getenv("YOUTUBE_API_KEY") or None   # Data API v3 key: read-only trend scanning (Signal Deck)
+YOUTUBE_CLIENT_ID     = os.getenv("YOUTUBE_CLIENT_ID") or None # OAuth desktop client: uploading (Clip Forge)
+YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET") or None
+YOUTUBE_REFRESH_TOKEN = os.getenv("YOUTUBE_REFRESH_TOKEN") or None
+YOUTUBE_CHANNEL       = os.getenv("YOUTUBE_CHANNEL") or None   # filled by youtube-auth
+CLIP_PRICE     = float(os.getenv("CLIP_PRICE", "35"))          # what one made-to-order short sells for
+SIGNAL_GENRES  = [g.strip() for g in os.getenv("SIGNAL_GENRES", "minecraft parkour,satisfying,asmr,motivation,product review,etsy small business,day in the life,cooking,facts,history,pov,gaming clips,ai art,fitness,finance tips,cozy aesthetic").split(",") if g.strip()]
 
 def integrations() -> dict:
     """What is actually wired up, for the dashboard's setup checklist."""
@@ -56,7 +66,9 @@ def integrations() -> dict:
             "fiverr": False, "dry_run": DRY_RUN, "auto_approve": AUTO_APPROVE,
             "autonomy": AUTONOMY, "daily_cap": DAILY_SPEND_CAP, "mother": MOTHER_NAME, "creator": CREATOR,
             "telegram": bool(TELEGRAM_BOT_TOKEN), "mail": bool(MAIL_IMAP_HOST and MAIL_USER and MAIL_PASSWORD),
-            "auto_retire": AUTO_RETIRE, "auto_price": AUTO_PRICE}
+            "auto_retire": AUTO_RETIRE, "auto_price": AUTO_PRICE,
+            "youtube_scan": bool(YOUTUBE_API_KEY), "youtube_upload": bool(YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET and YOUTUBE_REFRESH_TOKEN),
+            "tts": bool(IMAGE_API_KEY), "ffmpeg": __import__("shutil").which("ffmpeg") is not None}
 
 # USD per 1M tokens, used to cost every agent step. Adjust to the model you run.
 PRICES = {   # matched by substring of the model name

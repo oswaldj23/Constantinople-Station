@@ -1,0 +1,15 @@
+id: clip_orders
+name: CLIP FORGE · ORDERS
+display_as: clips
+agents: [REEL, VOX, CUT]
+trigger: event                 # a paying client order: POST /inbound/clip_order or /clip on Telegram
+artifact: clip
+complete_msg: "Client short delivered: {title}"
+steps:
+  - {id: script,     name: Script,       kind: agent, agent: REEL, prompt: clip_order_script.md}
+  - {id: voiceover,  name: Voiceover,    kind: tool,  tool: clips.voiceover, agent: VOX}
+  - {id: scenes,     name: Scenes,       kind: tool,  tool: clips.scenes, agent: CUT}
+  - {id: render,     name: Render,       kind: tool,  tool: clips.render, agent: CUT, pause: 0.2}
+  - {id: mother_review, name: Mother's review, kind: agent, agent: MOTHER, prompt: clip_review.md, verdict_from: verdict}
+  - {id: package,    name: Package,      kind: tool,  tool: clips.package, agent: CUT, transfer_to: treasury}
+  - {id: ledger,     name: Ledger,       kind: tool,  tool: treasury.record_payout, args: {bay: clips}, agent: CUT}
