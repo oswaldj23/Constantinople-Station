@@ -30,9 +30,31 @@ class Orchestrator:
         self.ledger.emit("core", "mission", f"Prime mission active · leg {st['leg']:02d} of {st['legs']} · ${st['banked']:,.2f} banked · next waypoint {st['next_waypoint']['name']} ({mission.short(st['next_waypoint']['amount'])})", agent=config.MOTHER_NAME)
         await self.mother.start()
         await self.telegram.start()
+        asyncio.create_task(self._resume_gated_runs())
         for b in self.bays.values():
             self.tasks.append(asyncio.create_task(self._loop(b), name=b.id))
         self.tasks.append(asyncio.create_task(self._heartbeat()))
+
+    async def _resume_gated_runs(self):
+        """Approvals used to live only inside the running process; a restart orphaned them. Now any run that was
+        waiting at a gate (pending, or approved but never finished) is resumed from that step."""
+        import json
+        await asyncio.sleep(3)
+        rows = self.ledger.approvals("pending", 50) + self.ledger.approvals("approved", 50)
+        for a in rows:
+            if a["gate"] == "escalation" or a["bay"] not in self.bays: continue
+            try: payload = json.loads(a.get("payload") or "{}")
+            except Exception: continue
+            run_id = payload.get("run_id")
+            if not run_id: continue
+            done = self.ledger.db.execute("SELECT 1 FROM events WHERE run_id=? AND kind IN ('complete','incident') LIMIT 1", (run_id,)).fetchone()
+            granted = self.ledger.db.execute("SELECT 1 FROM events WHERE run_id=? AND kind='status' AND msg LIKE 'Approval #% granted' AND msg LIKE ?", (run_id, f"Approval #{a['id']} granted")).fetchone()
+            if done or granted: continue
+            bay = self.bays[a["bay"]]
+            if not any(st["id"] == a["step"] for st in bay.steps): continue
+            log.info("resuming %s run %s at %s (approval #%s %s)", bay.id, run_id, a["step"], a["id"], a["status"])
+            asyncio.create_task(self._guarded(bay, None, {"approval_id": a["id"], "step_id": a["step"], "ctx": payload}))
+            await asyncio.sleep(0.5)
 
     async def stop(self):
         for t in self.tasks: t.cancel()
@@ -40,9 +62,9 @@ class Orchestrator:
     async def run_once(self, bay_id: str, seed: dict | None = None):
         return await self._guarded(self.bays[bay_id], seed)
 
-    async def _guarded(self, bay: Bay, seed=None):
+    async def _guarded(self, bay: Bay, seed=None, resume=None):
         try:
-            return await self.runner.run(bay, seed)
+            return await self.runner.run(bay, seed, resume)
         except Hold:
             log.info("%s held", bay.id)
         except Rejected:

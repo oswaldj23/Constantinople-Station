@@ -47,11 +47,15 @@ class Runner:
             self.shared = {}
         self.waits: dict[int, asyncio.Event] = {}
 
-    async def run(self, bay: Bay, seed: Optional[dict] = None) -> dict:
+    async def run(self, bay: Bay, seed: Optional[dict] = None, resume: Optional[dict] = None) -> dict:
+        """resume = {"approval_id": int, "step_id": str, "ctx": dict} continues a run that was waiting at a gate when the engine restarted."""
         L = self.ledger
-        run_id = f"{bay.id}-{uuid.uuid4().hex[:8]}"
+        run_id = (resume or {}).get("ctx", {}).get("run_id") or f"{bay.id}-{uuid.uuid4().hex[:8]}"
         ctx: dict[str, Any] = {"run_id": run_id, "bay": bay.id, "_ledger": L, **self.shared}
         if seed: ctx.update(seed)
+        if resume:
+            ctx.update({k: v for k, v in resume["ctx"].items() if not k.startswith("_")}); ctx["run_id"] = run_id; ctx["_ledger"] = L
+            L.emit(bay.id, "status", f"Resuming run at '{resume['step_id']}' after restart · approval #{resume['approval_id']}", agent=config.MOTHER_NAME, run_id=run_id)
         # preconditions: a bay can require another bay's handoff, or skip when the shop has no listings yet
         for req in bay.spec.get("requires", []):
             if req not in self.shared:
@@ -64,8 +68,12 @@ class Runner:
         if bay.spec.get("skip_unless_listings") and not L.artifacts(kind_filter="listing", limit=1):
             L.emit(bay.id, "poll", "Nothing to publish yet · waiting for the first listing", agent=bay.agents[0] if bay.agents else "MOTHER", run_id=run_id)
             raise Rejected()
-        L.bump(bay.id, runs=1)
+        if not resume: L.bump(bay.id, runs=1)
+        skipping = bool(resume)
         for i, st in enumerate(bay.steps):
+            if skipping:
+                if st["id"] != resume["step_id"]: continue
+                skipping = False
             state = L.bay(bay.id)
             if state.get("status") == "hold":
                 L.emit(bay.id, "status", f"Run paused at step {i+1:02d} · bay on HOLD", step=i + 1, run_id=run_id, status="hold")
@@ -74,7 +82,10 @@ class Runner:
             agent = st.get("agent") or (bay.agents[0] if bay.agents else "CONSTANTINOPLE")
             # approval gate before anything that spends or publishes
             if st.get("gate") and not config.AUTO_APPROVE:
-                await self._gate(bay, st, ctx, i, run_id)
+                if resume and st["id"] == resume["step_id"]:
+                    await self._wait_approval(bay, resume["approval_id"], i, run_id)
+                else:
+                    await self._gate(bay, st, ctx, i, run_id)
             result, cost = await self._exec(st, ctx)
             if result.get("incident"):
                 L.emit(bay.id, "incident", result["incident"], step=i + 1, agent=agent, run_id=run_id)
@@ -131,9 +142,13 @@ class Runner:
         self.ledger.emit(bay.id, "status", f"Awaiting approval #{aid}: {summary}", step=i + 1, agent=config.CALLSIGN, run_id=run_id, approval=aid)
         if self.mother is not None:
             await self.mother.consider(aid, bay.id, st["gate"], summary, float(st.get("est_cost", 0.2)))
+        await self._wait_approval(bay, aid, i, run_id)
+
+    async def _wait_approval(self, bay: Bay, aid: int, i: int, run_id: str):
         ev = asyncio.Event(); self.waits[aid] = ev
         while True:
             a = self.ledger.approval(aid)
+            if not a: raise Rejected()
             if a["status"] == "approved":
                 self.ledger.emit(bay.id, "status", f"Approval #{aid} granted", step=i + 1, agent=config.CALLSIGN, run_id=run_id); return
             if a["status"] == "rejected":
