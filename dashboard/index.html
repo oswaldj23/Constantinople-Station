@@ -204,7 +204,7 @@ code{font-family:var(--mono);color:var(--ph-bright);background:rgba(61,255,115,.
 #chart{display:block;width:100%;flex:1;min-height:200px}
 .mstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;padding:10px 14px;border-top:1px solid var(--ph-faint)}
 .mstats .v{white-space:normal;line-height:1.1}
-.wp{display:grid;grid-template-columns:18px 1fr auto;gap:8px;align-items:center;padding:5px 0;border-bottom:1px dashed var(--ph-faint);font-size:10.5px;color:var(--ph-dim)}
+.wp{display:grid;grid-template-columns:24px 1fr auto;gap:8px;align-items:center;padding:5px 0;border-bottom:1px dashed var(--ph-faint);font-size:10.5px;color:var(--ph-dim)}
 .wp .d{width:7px;height:7px;border:1px solid var(--ph-dim);transform:rotate(45deg);margin-left:4px}
 .wp.done{color:var(--ph-text)} .wp.done .d{background:var(--ph);border-color:var(--ph);box-shadow:0 0 6px var(--ph)}
 .wp.next{color:var(--ph-bright)} .wp.next .d{border-color:var(--ph-bright);background:rgba(61,255,115,.3);animation:blink 1s steps(2,end) infinite}
@@ -360,7 +360,7 @@ code{font-family:var(--mono);color:var(--ph-bright);background:rgba(61,255,115,.
     <div class="view" id="view-mission"><div class="inner">
       <div class="vhead"><h2>PRIME MISSION</h2><span class="meta" id="misMeta"></span><div class="chips"><span class="chip on">target $1,000,000,000,000</span></div></div>
       <div class="vbody"><div class="left"><canvas id="chart" aria-label="Journey chart"></canvas><div class="mstats" id="misStats"></div></div>
-        <div><div class="directive" id="misDirective"></div><div class="contrib"><div class="sect">Waypoints</div><div id="misWps"></div></div><div class="contrib"><div class="sect">Crew contribution to the mission</div><table id="misContrib"></table></div><div class="contrib"><p class="note dim">The journey is drawn on a log scale: every waypoint is ten times the last. Velocity is revenue per sol (day); the required velocity is what a ten-year arrival at Trillion Dawn would take from today. Doublings is how many times the station's total has to double.</p></div></div></div>
+        <div><div class="directive" id="misDirective"></div><div class="contrib"><div class="sect">Waypoints</div><div id="misWps"></div></div><div class="contrib"><div class="sect">Crew contribution to the mission</div><table id="misContrib"></table></div><div class="contrib"><p class="note dim">The journey is drawn world to world: each stop is its own planet, and the hull's position within a leg is on a log scale. Velocity is revenue per sol (day); the required velocity is what a ten-year arrival at Trillion Dawn would take from today. Doublings is how many times the station's total has to double.</p></div></div></div>
     </div></div>
     <div class="view" id="view-settings"><div class="inner">
       <div class="vhead"><h2>BRIDGE CONTROLS</h2><span class="meta">connect an engine · sound · reset</span></div>
@@ -420,7 +420,7 @@ kinds: snapshot · step · complete · sale · order · message · reply · inci
 const SPINE_Y = 215, WORLD_W = 760, WORLD_H = 430;
 const COLORS = {ph:'#3dff73', phb:'#9cffb8', phd:'#1f8c45', amber:'#ffb545', red:'#ff4f5e', cyan:'#45d9f0', pink:'#ff5cc0', gold:'#ffd24d', orange:'#ff8a3d', violet:'#b07cff', grey:'#6c7a86', blue:'#5aa8ff'};
 
-const MISSION={target:1e12, waypoints:[[1e3,'First Light'],[1e4,'Ember Reach'],[1e5,'Meridian Gate'],[1e6,'Sable Crossing'],[1e7,'Bosphorus Deep'],[1e8,'The Verge'],[1e9,'Aurum Belt'],[1e10,'Cold Harbor'],[1e11,'Last Lantern'],[1e12,'Trillion Dawn']]};
+const MISSION={target:1e12, waypoints:[[1e3,'First Light'],[1e4,'Ember Reach'],[1e5,'Meridian Gate'],[1e6,'Sable Crossing'],[1e7,'Bosphorus Deep'],[1e8,'The Verge'],[2.5e8,"Theodora's Reach"],[5e8,'Halfmark'],[1e9,'Aurum Belt'],[5e9,'Argent Field'],[1e10,'Cold Harbor'],[1e11,'Last Lantern'],[2.5e11,'Obsidian Gate'],[5e11,'Penumbra'],[1e12,'Trillion Dawn']]};
 const DIRECTIVES=[
   'Leg {leg}: Production carries the mission. Research feeds it one brief per sol; Treasury releases a boost only when trailing margin clears 60%.',
   'Leg {leg}: Every sol without a new listing is a sol lost. Launch Bay posts twice; Comms keeps the reply window under 60 seconds.',
@@ -508,7 +508,7 @@ let seq = 400;
 const moneyS=n=> n>=1e9?'$'+(n/1e9).toFixed(2)+'B': n>=1e6?'$'+(n/1e6).toFixed(1)+'M': n>=1e4?'$'+(n/1e3).toFixed(1)+'K':money(n).replace(/\.\d+$/,'');
 const short$=n=> n>=1e12?'$'+(n/1e12)+'T': n>=1e9?'$'+(n/1e9)+'B': n>=1e6?'$'+(n/1e6)+'M': n>=1e3?'$'+(n/1e3)+'K':'$'+n;
 function fmtDur(days){ if(!isFinite(days)) return '—'; if(days<1) return Math.max(1,Math.round(days*24))+' h'; if(days<365) return Math.round(days)+' sols'; const y=days/365.25; if(y<1e4) return y.toLocaleString('en-US',{maximumFractionDigits:y<100?1:0})+' years'; if(y<1e6) return (y/1e3).toLocaleString('en-US',{maximumFractionDigits:0})+'k years'; return (y/1e6).toLocaleString('en-US',{maximumFractionDigits:1})+'M years'; }
-function missionState(){ const rev=Math.max(S.totals.rev,1); const wps=MISSION.waypoints; let li=wps.findIndex(w=>rev<w[0]); if(li<0) li=wps.length-1; const prev= li===0?1:wps[li-1][0]; const next=wps[li][0]; const legPct=clamp((Math.log10(rev)-Math.log10(prev))/(Math.log10(next)-Math.log10(prev)),0,1); const journey=clamp((Math.log10(rev)-3)/9,0,1); const days=Math.max(1,(Date.now()-S.startedAt)/86400000); const vel= S.mission.velocity!=null? S.mission.velocity : rev/days; const etaNext=vel>0?(next-rev)/vel:Infinity; const etaTarget=vel>0?(MISSION.target-rev)/vel:Infinity; const doublings=Math.max(0,Math.log2(MISSION.target/rev)); const reqVel10y=(MISSION.target-rev)/3652; return {rev,li,prev,next,legPct,journey,vel,etaNext,etaTarget,doublings,reqVel10y,name:wps[li][1],days}; }
+function missionState(){ const rev=Math.max(S.totals.rev,1); const wps=MISSION.waypoints; let li=wps.findIndex(w=>rev<w[0]); if(li<0) li=wps.length-1; const prev= li===0?1:wps[li-1][0]; const next=wps[li][0]; const legPct=clamp((Math.log10(rev)-Math.log10(prev))/(Math.log10(next)-Math.log10(prev)),0,1); const journey=clamp((li-1+legPct)/(wps.length-1),0,1); const days=Math.max(1,(Date.now()-S.startedAt)/86400000); const vel= S.mission.velocity!=null? S.mission.velocity : rev/days; const etaNext=vel>0?(next-rev)/vel:Infinity; const etaTarget=vel>0?(MISSION.target-rev)/vel:Infinity; const doublings=Math.max(0,Math.log2(MISSION.target/rev)); const reqVel10y=(MISSION.target-rev)/3652; return {rev,li,prev,next,legPct,journey,vel,etaNext,etaTarget,doublings,reqVel10y,name:wps[li][1],days}; }
 function directiveText(){ if(S.mission.directive) return S.mission.directive; const m=missionState(); return DIRECTIVES[S.mission.dirIdx%DIRECTIVES.length].replace('{leg}',pad(m.li+1)); }
 function hexA(hex,a){ const n=parseInt(hex.slice(1),16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; }
 
@@ -917,7 +917,7 @@ function renderHUD(){
   $('#hCost').textContent=money(S.totals.subs + S.totals.cost*0.5);
   const d=new Date(); $('#clock').textContent=hhmm(d); $('#sol').textContent='SOL '+pad(Math.floor((Date.now()-S.startedAt)/86400000),3);
   const I=S.mission.integrations; $('#hSim').textContent = (S.mode==='demo' || (I&&I.dry_run)) ? 'simulated' : ''; $('#modePill').textContent = S.mode==='demo'?'demo mode':(I&&I.dry_run?'live engine · dry run':'live engine'); $('#modePill').className='pill blink '+(S.mode==='demo'?'demo':(I&&I.dry_run?'demo':'live'));
-  const m=missionState(); $('#hMis').textContent=`LEG ${pad(m.li+1)}/10 · ${(m.legPct*100).toFixed(1)}% → ${m.name.toUpperCase()} ${short$(m.next)}`; $('#hMisBar').querySelector('i').style.setProperty('--p',(m.journey*100).toFixed(2)+'%');
+  const m=missionState(); $('#hMis').textContent=`LEG ${pad(m.li+1)}/${MISSION.waypoints.length} · ${(m.legPct*100).toFixed(1)}% → ${m.name.toUpperCase()} ${short$(m.next)}`; $('#hMisBar').querySelector('i').style.setProperty('--p',(m.journey*100).toFixed(2)+'%');
 }
 
 // ───────────────────────────── bay panel ─────────────────────────────
@@ -948,7 +948,7 @@ function renderPanelLive(){
   if(b.type==='treasury') { stats[0]=['Margin',S.totals.rev? Math.round((S.totals.rev-S.totals.cost-S.totals.subs*2)/S.totals.rev*100)+'%':'—',true]; stats[2]=['Spend (all)',money(S.totals.cost)]; }
   if(b.type==='launch') stats[0]=['Queued',(st.queue||3)+' items',true];
   if(b.type==='research') stats[0]=['Briefs',String(Math.floor(st.runs)+38),true];
-  if(b.type==='core'){ const m=missionState(); stats[0]=['Mission',(m.journey*100).toFixed(2)+'%',true]; stats[1]=['Leg',`${m.li+1}/10`]; stats[2]=['Velocity',moneyS(m.vel)+'/sol']; stats[3]=['Doublings',m.doublings.toFixed(1)]; }
+  if(b.type==='core'){ const m=missionState(); stats[0]=['Mission',(m.journey*100).toFixed(2)+'%',true]; stats[1]=['Leg',`${m.li+1}/${MISSION.waypoints.length}`]; stats[2]=['Velocity',moneyS(m.vel)+'/sol']; stats[3]=['Doublings',m.doublings.toFixed(1)]; }
   $('#pStats').innerHTML=stats.map(([k,v,acc])=>`<div class="cell"><div class="k">${k}</div><div class="v ${acc?'accent':''}">${v}</div></div>`).join('');
   const ctl=$('#pCtl'); if(dormant){ ctl.innerHTML=`<button class="btn" data-act="wake"><span class="ico">◇</span>Wake bay</button>`; }
   else ctl.innerHTML=`<button class="btn hold ${st.status==='hold'?'on':''}" data-act="hold"><span class="ico">▮▮</span>${st.status==='hold'?'Held':'Hold'}</button><button class="btn ${st.status==='boost'?'on':''}" data-act="boost"><span class="ico">▶▶</span>${st.status==='boost'?'Boosted':'Boost'}</button>`;
@@ -1021,22 +1021,47 @@ let misRaf=null;
 function stopMissionAnim(){ if(misRaf){ cancelAnimationFrame(misRaf); misRaf=null; } }
 function renderMission(){
   const m=missionState(); const wps=MISSION.waypoints;
-  $('#misMeta').textContent=`${S.ident.name} · sol ${pad(Math.floor(m.days),3)} · leg ${pad(m.li+1)} of 10`;
+  $('#misMeta').textContent=`${S.ident.name} · sol ${pad(Math.floor(m.days),3)} · leg ${pad(m.li+1)} of ${wps.length}`;
   $('#misDirective').innerHTML=`<div class="eyebrow">Standing directive · MOTHER</div><p>${esc(directiveText())}</p>`;
   $('#misStats').innerHTML=[['Banked',money(S.totals.rev)],['Next waypoint',`${short$(m.next)} · ${m.name}`],['Velocity',moneyS(m.vel)+' / sol'],['ETA next',fmtDur(m.etaNext)],['ETA Trillion Dawn',fmtDur(m.etaTarget)],['Needed for 10-yr arrival',moneyS(m.reqVel10y)+' / sol'],['Doublings left',m.doublings.toFixed(1)],['Journey',(m.journey*100).toFixed(3)+'%']].map(([k,v],i)=>`<div class="cell"><div class="k">${k}</div><div class="v ${i<2?'accent':''}" style="font-size:16px">${v}</div></div>`).join('');
-  $('#misWps').innerHTML=wps.map((w,i)=>`<div class="wp ${i<m.li?'done':(i===m.li?'next':'')}"><span class="d"></span><span class="n">${w[1]}<small>${i<m.li?'reached':(i===m.li?`${(m.legPct*100).toFixed(1)}% · ${fmtDur(m.etaNext)}`:'')}</small></span><span class="v">${short$(w[0])}</span></div>`).join('');
+  $('#misWps').innerHTML=wps.map((w,i)=>`<div class="wp ${i<m.li?'done':(i===m.li?'next':'')}"><canvas class="pl" width="22" height="22"></canvas><span class="n">${w[1]}<small>${i<m.li?'reached':(i===m.li?`${(m.legPct*100).toFixed(1)}% · ${fmtDur(m.etaNext)}`:'')}</small></span><span class="v">${short$(w[0])}</span></div>`).join('');
+  $('#misWps').querySelectorAll('canvas.pl').forEach((c,i)=>{ const x2=c.getContext('2d'); drawPlanet(x2,11,11,8,i, i<m.li?'done':(i===m.li?'next':'far'), 0, 1); });
   const rows=BAYS.map(b=>({b,st:S.bays[b.id]})).filter(r=>r.st.rev>0||r.st.status!=='standby').sort((a,c)=>c.st.rev-a.st.rev);
   $('#misContrib').innerHTML=`<thead><tr><th>Bay</th><th>Banked</th><th>Share</th><th>Role this leg</th></tr></thead><tbody>${rows.map(({b,st})=>`<tr><td><span class="sw" style="--bay:${b.color}"></span>${b.name}</td><td>${st.rev?money(st.rev):'—'}</td><td>${st.rev?(st.rev/Math.max(1,S.totals.rev)*100).toFixed(1)+'%':'—'}</td><td style="white-space:normal;text-align:right;color:var(--ph-dim)">${roleFor(b)}</td></tr>`).join('')}</tbody>`;
   stopMissionAnim(); const draw=()=>{ drawJourney(); misRaf=requestAnimationFrame(draw); }; draw();
 }
 function roleFor(b){ return {core:'navigation · directives',research:'finds the next product',production:'earns · carries the leg',studio:'earns · service revenue',comms:'keeps buyers · reviews',treasury:'margin · boost authority',launch:'reach · new buyers',archive:'memory · audit',clips:'earns · shorts + service',signal:'finds what is watched',dormant:'standby · next front'}[b.type]||''; }
 const jstars=[]; for(let i=0;i<120;i++) jstars.push([Math.random(),Math.random(),Math.random()]);
+// Each waypoint is its own world. Everything about it (size, palette, bands, rings, moons, craters, ice caps) is derived from its index, so it looks the same every time.
+const PLANET_PALS=[['#6b3a1e','#c9733a','#f2b27a'],['#8c2f1f','#e05a3a','#ffb28a'],['#2b4d7a','#4f8fd1','#a9d8ff'],['#243326','#4d7a3f','#9ed57a'],['#1f2a4f','#4651a8','#9aa6ff'],['#3a2a1a','#8a6a3a','#e5c98a'],['#4a1f3f','#a0458a','#ffa3e6'],['#1a3a3a','#2f8a84','#9af0e6'],['#5a4a10','#c9a62a','#ffe88a'],['#223','#5a6a86','#c4d3ea'],['#102a40','#1f6fa0','#8fd3ff'],['#3a3a44','#8a8aa0','#e0e0ee'],['#1a1218','#3d2a3a','#8a6a86'],['#1f1f2a','#4a3a6a','#b89ad8'],['#3a2a00','#ffb545','#fff3c4']];
+function drawPlanet(x,cx,cy,r,i,state,t,scale){
+  const rnd=mulberry(0.137+i*0.0731); const pal=PLANET_PALS[i%PLANET_PALS.length]; const dim= state==='far'; const bright= state==='done'||state==='next';
+  const hasRing= rnd()<0.4, ringTilt=0.25+rnd()*0.3, bands= 2+Math.floor(rnd()*4), craters= rnd()<0.5? 2+Math.floor(rnd()*4):0, caps= rnd()<0.4, moons= rnd()<0.6? 1+Math.floor(rnd()*2):0, gas= rnd()<0.5;
+  const p=Math.max(1, r>10?2:1); // pixel size
+  const lx=-0.6, ly=-0.5; // light from upper-left
+  x.save(); x.translate(Math.round(cx),Math.round(cy)); if(scale) x.scale(scale,scale);
+  if(bright){ const gl=x.createRadialGradient(0,0,r*0.6,0,0,r*2.2); gl.addColorStop(0, state==='next'?'rgba(156,255,184,0.28)':hexA(pal[2],0.22)); gl.addColorStop(1,'rgba(0,0,0,0)'); x.fillStyle=gl; x.fillRect(-r*2.2,-r*2.2,r*4.4,r*4.4); }
+  if(hasRing){ // back half of ring
+    x.strokeStyle= dim?'rgba(60,70,80,0.6)':hexA(pal[2],0.55); x.lineWidth=p*1.4; x.beginPath(); x.ellipse(0,0,r*1.9,r*1.9*ringTilt,0,Math.PI,2*Math.PI); x.stroke(); }
+  for(let py=-r;py<=r;py+=p){ for(let px=-r;px<=r;px+=p){ const d2=px*px+py*py; if(d2>r*r) continue;
+    const nx=px/r, ny=py/r, nz=Math.sqrt(Math.max(0,1-nx*nx-ny*ny)); let shade = Math.max(0, nx*lx+ny*ly+nz*0.75);
+    const lat = Math.asin(clamp(ny,-1,1)); let band = Math.sin(lat*bands*2 + (gas? Math.sin(nx*3+i)*0.6:0)); let col = band>0.2? pal[1] : (band<-0.3? pal[0] : pal[2]);
+    if(caps && Math.abs(ny)>0.78) col='#eef6ff';
+    if(craters){ for(let k=0;k<craters;k++){ const ca=((i*7+k*13)%17)/17*2-1, cb=((i*11+k*5)%13)/13*2-1; const dd=(nx-ca*0.7)*(nx-ca*0.7)+(ny-cb*0.7)*(ny-cb*0.7); if(dd<0.02+0.01*k){ col=pal[0]; shade*=0.7; } } }
+    const n=parseInt(col.slice(1),16); let R=n>>16&255,G=n>>8&255,B=n&255; const sh = dim? 0.3+shade*0.45 : 0.35+shade*0.8; R=Math.min(255,R*sh); G=Math.min(255,G*sh); B=Math.min(255,B*sh);
+    if(dim){ const gy=(R+G+B)/3; R=R*0.65+gy*0.35; G=G*0.65+gy*0.35; B=B*0.65+gy*0.35; }
+    x.fillStyle=`rgb(${R|0},${G|0},${B|0})`; x.fillRect(px,py,p,p); } }
+  if(hasRing){ x.strokeStyle= dim?'rgba(90,100,110,0.8)':hexA(pal[2],0.9); x.lineWidth=p*1.4; x.beginPath(); x.ellipse(0,0,r*1.9,r*1.9*ringTilt,0,0,Math.PI); x.stroke(); }
+  for(let k=0;k<moons;k++){ const ang=t*(0.6+k*0.3)+k*2.1+i; const mr=r*(1.6+k*0.5); const mx=Math.cos(ang)*mr, my=Math.sin(ang)*mr*0.45; if(Math.sin(ang)>0||!t){ x.fillStyle= dim?'#4a525c':'#d8dde6'; x.fillRect(Math.round(mx)-1,Math.round(my)-1,p+1,p+1); } }
+  if(state==='next'){ x.strokeStyle=`rgba(156,255,184,${0.5+0.5*Math.sin(t*4)})`; x.lineWidth=1; x.beginPath(); x.arc(0,0,r+4,0,6.28); x.stroke(); }
+  x.restore();
+}
 function drawJourney(){
   const c=$('#chart'); const r=c.getBoundingClientRect(); if(r.width<10) return; const d=Math.min(2,window.devicePixelRatio||1); if(c.width!==Math.round(r.width*d)||c.height!==Math.round(r.height*d)){ c.width=Math.round(r.width*d); c.height=Math.round(r.height*d); }
   const x=c.getContext('2d'); x.setTransform(d,0,0,d,0,0); const W=r.width,H=r.height; const t=performance.now()/1000; const m=missionState(); const wps=MISSION.waypoints;
   x.fillStyle='#03070a'; x.fillRect(0,0,W,H);
   for(const [sx,sy,z] of jstars){ x.fillStyle=`rgba(140,200,180,${0.25+0.5*Math.abs(Math.sin(t*0.7+sx*20))})`; const px=((sx*W - t*4*(1+z)) % W + W) % W; x.fillRect(Math.round(px),Math.round(sy*H),z>0.8?2:1,z>0.8?2:1); }
-  const padL=W<520?30:56,padR=W<520?34:64,midY=H*0.55,amp=H*0.14; const px_=i=>padL+(W-padL-padR)*i/(wps.length-1); const py_=i=>midY+Math.sin(i*1.1)*amp;
+  const padL=W<520?30:56,padR=W<520?34:64,midY=H*0.54,amp=H*0.28; const px_=i=>padL+(W-padL-padR)*i/(wps.length-1); const py_=i=>midY+Math.sin(i*0.85+0.6)*amp;
   const pos=(u)=>{ const i=u*(wps.length-1); const a=Math.floor(i), b=Math.min(wps.length-1,a+1), f=i-a; return [px_(a)+(px_(b)-px_(a))*f, py_(a)+(py_(b)-py_(a))*f]; };
   // route
   x.setLineDash([3,5]); x.strokeStyle='rgba(61,255,115,.25)'; x.lineWidth=1; x.beginPath(); for(let i=0;i<wps.length;i++){ const [a,b]=[px_(i),py_(i)]; i?x.lineTo(a,b):x.moveTo(a,b);} x.stroke(); x.setLineDash([]);
@@ -1044,20 +1069,21 @@ function drawJourney(){
   x.strokeStyle='rgba(61,255,115,.9)'; x.lineWidth=2; x.shadowColor='#3dff73'; x.shadowBlur=8; x.beginPath(); const steps=60; for(let k=0;k<=steps;k++){ const [a,b]=pos(m.journey*k/steps); k?x.lineTo(a,b):x.moveTo(a,b);} x.stroke(); x.shadowBlur=0;
   // waypoints
   x.font='11px VT323, monospace'; x.textAlign='center'; const narrow=W<520;
-  wps.forEach((w,i)=>{ const [a,b]=[px_(i),py_(i)]; const done=i<m.li, next=i===m.li; const showLabel=!narrow || done || next || i===wps.length-1; x.save(); x.translate(a,b); x.rotate(Math.PI/4); x.fillStyle= done?'#3dff73':(next?(Math.sin(t*4)>0?'#9cffb8':'#1f8c45'):'#0f3d22'); x.fillRect(-4,-4,8,8); x.strokeStyle= done||next?'#9cffb8':'#1f8c45'; x.strokeRect(-4.5,-4.5,9,9); x.restore();
-    if(!showLabel) return; const above=i%2===0; const name=w[1].toUpperCase(); const tw=x.measureText(name).width; const ax=clamp(a,tw/2+4,W-tw/2-4); x.fillStyle= done?'#9cffb8':(next?'#3dff73':'#2f6b45'); x.fillText(name, ax, above?b-14:b+22); x.fillStyle='#1f8c45'; x.font='10px "IBM Plex Mono", monospace'; x.fillText(short$(w[0]), ax, above?b-26:b+34); x.font='11px VT323, monospace'; });
+  const pr = narrow? 6 : (W<900? 10 : 14);
+  wps.forEach((w,i)=>{ const [a,b]=[px_(i),py_(i)]; const done=i<m.li, next=i===m.li; const showLabel=!narrow || done || next || i===wps.length-1; drawPlanet(x,a,b, i===wps.length-1? pr*1.5 : pr + (i%3===0?1:0), i, done?'done':(next?'next':'far'), t);
+    if(!showLabel) return; const above= Math.sin(i*0.85+0.6)<0; const off2= (i===wps.length-1? pr*1.5:pr)+10+(i%2?38:0); const name=w[1].toUpperCase(); const tw=x.measureText(name).width; const ax=clamp(a,tw/2+4,W-tw/2-4); x.fillStyle= done?'#9cffb8':(next?'#3dff73':'#2f6b45'); x.fillText(name, ax, above?b-off2-8:b+off2+8); x.fillStyle='#1f8c45'; x.font='10px "IBM Plex Mono", monospace'; x.fillText(short$(w[0]), ax, above?b-off2-20:b+off2+20); x.font='11px VT323, monospace'; });
   // ship
   const [sx,sy]=pos(m.journey); const bob=Math.sin(t*2)*1.5; x.save(); x.translate(Math.round(sx),Math.round(sy+bob)); const S3=2.2; x.scale(S3,S3);
   const f=0.6+0.4*Math.sin(t*20); x.fillStyle=`rgba(90,168,255,${0.5*f})`; x.fillRect(-11-6*f,-1,6*f+2,3); x.fillStyle='#aee0ff'; x.fillRect(-10-3*f,0,3*f+1,1);
   x.fillStyle='#3a4451'; x.fillRect(-9,-2,14,5); x.fillStyle='#c9ced6'; x.fillRect(-8,-1,12,3); x.fillStyle='#2b333d'; x.fillRect(-6,-4,6,2); x.fillRect(-6,3,6,2); x.fillStyle='#3dff73'; x.fillRect(2,0,2,1); x.fillStyle='#ff5cc0'; x.fillRect(-4,-4,1,1); x.fillStyle='#ffb545'; x.fillRect(-4,4,1,1); x.restore();
-  x.textAlign='left'; const lab=`${S.ident.name} · ${money(S.totals.rev)} banked · ${moneyS(m.vel)}/sol · leg ${pad(m.li+1)}`; x.font='12px "IBM Plex Mono", monospace'; x.fillStyle='#9cffb8'; x.fillText(narrow?`${money(S.totals.rev)} · ${moneyS(m.vel)}/sol`:lab,12,18); x.fillStyle='#1f8c45'; x.fillText(narrow?`${(m.journey*100).toFixed(2)}% travelled`:`route to Trillion Dawn · log scale · ${(m.journey*100).toFixed(2)}% travelled`,12,32);
+  x.textAlign='left'; const lab=`${S.ident.name} · ${money(S.totals.rev)} banked · ${moneyS(m.vel)}/sol · leg ${pad(m.li+1)}`; x.font='12px "IBM Plex Mono", monospace'; x.fillStyle='#9cffb8'; x.fillText(narrow?`${money(S.totals.rev)} · ${moneyS(m.vel)}/sol`:lab,12,18); x.fillStyle='#1f8c45'; x.fillText(narrow?`${(m.journey*100).toFixed(2)}% travelled`:`route to Trillion Dawn · 15 worlds · ${(m.journey*100).toFixed(2)}% travelled`,12,32);
 }
 $('#hMission').onclick=()=>showView('mission'); $('#hMission').onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); showView('mission'); } };
 
 // archive
 const CHIPS=['ALL','ACCEPTED','REJECTED','MOTHER','MISSION','SALE','STEP','TREND','MESSAGE','PUBLISH','INCIDENT','STATUS','CODEX'];
 const CODEX=[
-  {title:'Prime mission', body:`The station has one destination: one trillion United States dollars, banked and written. Every bay, every agent and every sol exists to move the hull toward it.\n\n• The route is ten waypoints, each ten times the last: First Light ($1K), Ember Reach ($10K), Meridian Gate ($100K), Sable Crossing ($1M), Bosphorus Deep ($10M), The Verge ($100M), Aurum Belt ($1B), Cold Harbor ($10B), Last Lantern ($100B), Trillion Dawn ($1T).\n• No bay competes with another. A bay that cannot show how its next run moves the hull stands down and asks Research for a better one.\n• Velocity is revenue per sol. The Core publishes it, the required velocity, and the doublings remaining, every sol, so nobody on board mistakes motion for progress.\n• The mission is won by compounding, not by sprinting: new bays, better margins, more hulls. The doctrine below is how the station survives long enough to get there.`, tags:['mission','origin','live']},
+  {title:'Prime mission', body:`The station has one destination: one trillion United States dollars, banked and written. Every bay, every agent and every sol exists to move the hull toward it.\n\n• The route is fifteen worlds: First Light ($1K), Ember Reach ($10K), Meridian Gate ($100K), Sable Crossing ($1M), Bosphorus Deep ($10M), The Verge ($100M), Theodora's Reach ($250M), Halfmark ($500M), Aurum Belt ($1B), Argent Field ($5B), Cold Harbor ($10B), Last Lantern ($100B), Obsidian Gate ($250B), Penumbra ($500B), Trillion Dawn ($1T). Each is its own planet on the chart; the hull is drawn where the ledger puts it.\n• No bay competes with another. A bay that cannot show how its next run moves the hull stands down and asks Research for a better one.\n• Velocity is revenue per sol. The Core publishes it, the required velocity, and the doublings remaining, every sol, so nobody on board mistakes motion for progress.\n• The mission is won by compounding, not by sprinting: new bays, better margins, more hulls. The doctrine below is how the station survives long enough to get there.`, tags:['mission','origin','live']},
   {title:'Boot doctrine', body:`Mother wakes the station with one instruction: keep the lights on, keep the books true.\n\n• Every room is self-contained. Every door is numbered. Nothing is deleted, only superseded.\n• All rooms answer to the bridge command structure.\n• All findings route through the research routing rule.\n• All spend is mirrored to the Treasury mirror ledger.`, tags:['origin','system','live']},
   {title:'Spend mirror rule', body:`No bay may spend what it has not written. Each model call, image render and API request is costed at the step that caused it and mirrored to Treasury before the next step begins. Drift above $0.50 raises an incident.`, tags:['treasury','rule']},
   {title:'Reply window', body:`Every inbound customer message is answered in under 90 seconds, in the station voice, with the order looked up first. Misses are logged as incidents and reviewed against the doctrine, never hidden.`, tags:['comms','rule']},
@@ -1156,7 +1182,7 @@ let actx=null; function beep(f){ if(!S.sound||!f) return; try{ actx=actx||new (w
 
 // ───────────────────────────── boot ─────────────────────────────
 let bootOn=true;
-const BOOT_LINES=[[S.ident.name+' OS v0.1 · bridge terminal',''],['Prime mission: $1,000,000,000,000 · route plotted · 10 waypoints','ok'],['MOTHER online · overseer · the crew reports to her, she reports to the Creator','ok'],['Mounting treasury ledger','ok'],['Indexing archive vault · 254 entries','ok'],['Waking crew: SCOUT FORGE MINT PRESS REEL VOX CUT LUMEN DIAL RAY HERALD VAULT ARCHIVIST BEACON CLIP','ok'],['Linking bays · 10 found · Clip Forge and Signal Deck online','ok'],['Commerce link: DEMO · simulated sales until an engine is connected','warn'],['Drag to pan · scroll to zoom · click a bay to open its terminal','']];
+const BOOT_LINES=[[S.ident.name+' OS v0.1 · bridge terminal',''],['Prime mission: $1,000,000,000,000 · route plotted · 15 worlds','ok'],['MOTHER online · overseer · the crew reports to her, she reports to the Creator','ok'],['Mounting treasury ledger','ok'],['Indexing archive vault · 254 entries','ok'],['Waking crew: SCOUT FORGE MINT PRESS REEL VOX CUT LUMEN DIAL RAY HERALD VAULT ARCHIVIST BEACON CLIP','ok'],['Linking bays · 10 found · Clip Forge and Signal Deck online','ok'],['Commerce link: DEMO · simulated sales until an engine is connected','warn'],['Drag to pan · scroll to zoom · click a bay to open its terminal','']];
 (async function boot(){ const scr=$('#bootScr'); const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   for(const [line,st] of BOOT_LINES){ if(!bootOn) break; const d=document.createElement('div'); d.className='cur'; scr.appendChild(d); if(reduce){ d.textContent=line; } else { for(let i=0;i<=line.length;i++){ d.textContent=line.slice(0,i); await sleep(8); if(!bootOn) break; } } d.className=''; if(st) d.insertAdjacentHTML('beforeend',` <span class="${st}">[${st==='ok'?' OK ':'WARN'}]</span>`); await sleep(reduce?0:120); }
   if(bootOn){ const e=document.createElement('div'); e.className='enter'; e.textContent='[ TAP OR PRESS ANY KEY TO ENTER STATION ]'; scr.appendChild(e); setTimeout(endBoot,4500); }

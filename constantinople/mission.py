@@ -1,12 +1,13 @@
-"""The Prime Mission: $1,000,000,000,000 banked. Ten waypoints, each ten times the last. The Core
-publishes position, velocity and ETA every sol so the crew steers by the same numbers."""
+"""The Prime Mission: $1,000,000,000,000 banked. Fifteen worlds on the route; the Core publishes
+position, velocity and ETA every sol so the crew steers by the same numbers."""
 import math
 from datetime import datetime, timedelta, timezone
 from . import config
 
 WAYPOINTS = [(1e3, "First Light"), (1e4, "Ember Reach"), (1e5, "Meridian Gate"), (1e6, "Sable Crossing"),
-             (1e7, "Bosphorus Deep"), (1e8, "The Verge"), (1e9, "Aurum Belt"), (1e10, "Cold Harbor"),
-             (1e11, "Last Lantern"), (1e12, "Trillion Dawn")]
+             (1e7, "Bosphorus Deep"), (1e8, "The Verge"), (2.5e8, "Theodora's Reach"), (5e8, "Halfmark"),
+             (1e9, "Aurum Belt"), (5e9, "Argent Field"), (1e10, "Cold Harbor"), (1e11, "Last Lantern"),
+             (2.5e11, "Obsidian Gate"), (5e11, "Penumbra"), (1e12, "Trillion Dawn")]
 
 
 def short(n: float) -> str:
@@ -30,7 +31,7 @@ def state(ledger) -> dict:
     prev = 1.0 if li == 0 else WAYPOINTS[li - 1][0]
     nxt, name = WAYPOINTS[li]
     leg_pct = max(0.0, min(1.0, (math.log10(rev) - math.log10(prev)) / (math.log10(nxt) - math.log10(prev))))
-    journey = max(0.0, min(1.0, (math.log10(rev) - 3) / 9))
+    journey = max(0.0, min(1.0, (li - 1 + leg_pct) / (len(WAYPOINTS) - 1)))   # world to world; log-scale inside a leg
     vel = velocity_per_day(ledger)
     first = ledger.db.execute("SELECT MIN(ts) t FROM events").fetchone()["t"]
     return {
