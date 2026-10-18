@@ -71,10 +71,17 @@ async def scan_shorts(ctx, *, genres=None, days: int = 7, dry_run: bool = True, 
 
 async def channel_stats(ctx, *, dry_run: bool = True, **_):
     """Our own channel's recent shorts: views per video, so Treasury and Mother see what lands."""
-    if dry_run or not config.YOUTUBE_API_KEY or not config.YOUTUBE_CHANNEL:
+    chan = config.YOUTUBE_CHANNEL
+    try:
+        import re as _re
+        for line in (config.ROOT / ".env").read_text().splitlines():
+            m = _re.match(r"^YOUTUBE_CHANNEL=(.+)$", line.strip())
+            if m: chan = m.group(1).strip()
+    except Exception: pass
+    if dry_run or not config.YOUTUBE_API_KEY or not chan:
         return {"videos": [], "cost": 0.0, "summary": "no channel stats (channel not linked)"}
     async with httpx.AsyncClient(timeout=30) as c:
-        r = await c.get(f"{API}/search", params={"key": config.YOUTUBE_API_KEY, "part": "id", "channelId": config.YOUTUBE_CHANNEL, "type": "video", "order": "date", "maxResults": 20})
+        r = await c.get(f"{API}/search", params={"key": config.YOUTUBE_API_KEY, "part": "id", "channelId": chan, "type": "video", "order": "date", "maxResults": 30})
         ids = [i["id"]["videoId"] for i in r.json().get("items", []) if i.get("id", {}).get("videoId")]
         if not ids: return {"videos": [], "cost": 0.0, "summary": "channel has no videos yet"}
         v = await c.get(f"{API}/videos", params={"key": config.YOUTUBE_API_KEY, "part": "statistics,snippet", "id": ",".join(ids)})

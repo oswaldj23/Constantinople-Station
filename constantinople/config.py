@@ -57,6 +57,8 @@ YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET") or None
 YOUTUBE_REFRESH_TOKEN = os.getenv("YOUTUBE_REFRESH_TOKEN") or None
 YOUTUBE_CHANNEL       = os.getenv("YOUTUBE_CHANNEL") or None   # filled by youtube-auth
 CLIP_PRICE     = float(os.getenv("CLIP_PRICE", "35"))          # what one made-to-order short sells for
+LISTINGS_PER_DAY = float(os.getenv("LISTINGS_PER_DAY", "2"))   # Etsy listings a day (each ~$0.20 fee + ~$0.10 images)
+PRODUCT_ROTATION = os.getenv("PRODUCT_ROTATION", "tee,sweatshirt,mug,tee,tote,hoodie")
 SIGNAL_GENRES  = [g.strip() for g in os.getenv("SIGNAL_GENRES", "scary stories,reddit stories,aita,story time,revenge stories,creepypasta,true scary stories,minecraft parkour,satisfying,facts,history,motivation,cozy aesthetic,ai art,etsy small business,day in the life").split(",") if g.strip()]
 
 def integrations() -> dict:
@@ -68,7 +70,8 @@ def integrations() -> dict:
             "telegram": bool(TELEGRAM_BOT_TOKEN), "mail": bool(MAIL_IMAP_HOST and MAIL_USER and MAIL_PASSWORD),
             "auto_retire": AUTO_RETIRE, "auto_price": AUTO_PRICE,
             "youtube_scan": bool(YOUTUBE_API_KEY), "youtube_upload": bool(YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET and YOUTUBE_REFRESH_TOKEN),
-            "tts": bool(IMAGE_API_KEY), "ffmpeg": __import__("shutil").which("ffmpeg") is not None}
+            "tts": bool(IMAGE_API_KEY), "ffmpeg": __import__("shutil").which("ffmpeg") is not None,
+            "listings_per_day": LISTINGS_PER_DAY, "product_rotation": PRODUCT_ROTATION}
 
 # USD per 1M tokens, used to cost every agent step. Adjust to the model you run.
 PRICES = {   # matched by substring of the model name

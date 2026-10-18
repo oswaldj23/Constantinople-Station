@@ -5,4 +5,4 @@ quiet: true
 agents: [HERALD]
 cadence_seconds: 120           # pull platform messages every 2 min; fans them out to the Comms Deck
 steps:
-  - {id: poll, name: Inbox pull, kind: tool, quiet: true, tool: mail.poll, fanout: {messages: comms}}
+  - {id: poll, name: Inbox pull, kind: tool, quiet: true, tool: mail.poll, fanout: {messages: comms, clip_orders: clip_orders, orders: studio}}

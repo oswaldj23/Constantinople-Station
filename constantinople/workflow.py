@@ -17,6 +17,9 @@ class Bay:
         self.agents = spec.get("agents", [])
         self.steps = spec.get("steps", [])
         self.cadence = float(spec.get("cadence_seconds", 1800))
+        if spec.get("runs_per_day_env"):      # e.g. LISTINGS_PER_DAY=3 → every 8 hours
+            try: self.cadence = 86400.0 / max(0.1, float(__import__("os").getenv(spec["runs_per_day_env"]) or spec.get("runs_per_day_default", 1)))
+            except Exception: pass
         self.trigger = spec.get("trigger", "cadence")     # cadence | event
         self.standby = bool(spec.get("standby", False))
         self.display = spec.get("display_as", self.id)   # which bay the dashboard shows this under

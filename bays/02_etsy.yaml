@@ -2,13 +2,15 @@ id: etsy
 name: ETSY PRODUCTION BAY
 agents: [FORGE, MINT, PRESS]
 requires: [research]          # never design without a brief; runs Research first if needed
-cadence_seconds: 86400         # one new listing a day while the shop is young; raise later
+cadence_seconds: 43200
+runs_per_day_env: LISTINGS_PER_DAY   # .env: how many listings a day (default 2); each costs ~$0.20 + image spend
+runs_per_day_default: 2
 artifact: listing
 complete_msg: "Listing live: {title}"
 steps:
   - {id: trend_scan,    name: Trend scan,    kind: agent, agent: FORGE, prompt: etsy_trend.md}
   - {id: design_draft,  name: Design draft,  kind: tool,  tool: images.generate, args: {prompt_from: trend_scan.design_prompt, n: 2, variants: true}, agent: FORGE}
-  - {id: mockup_build,  name: Mockup build,  kind: tool,  tool: printify.create_product, args: {products: [tee, mug, tote]}, agent: PRESS,
+  - {id: mockup_build,  name: Mockup build,  kind: tool,  tool: printify.create_product, agent: PRESS,
      gate: approve_spend, gate_summary: "Production wants to build mockups for \"{title}\" (print partner call, no fee)"}
   - {id: listing_draft, name: Listing draft, kind: agent, agent: MINT, prompt: etsy_listing.md}
   - {id: mother_review, name: Mother's review, kind: agent, agent: MOTHER, prompt: mother_listing_review.md, verdict_from: verdict}

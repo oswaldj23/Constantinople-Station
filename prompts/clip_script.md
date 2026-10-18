@@ -8,6 +8,8 @@ The brief's `story_seeds` are what the audience is upvoting today. Two modes, by
 - ORIGINAL (horror, facts): fiction belongs to whoever wrote it, so take only the SHAPE of a premise that is landing and write your own story — your own characters, place, details, twist and ending. Set `source` to null.
 If no seed fits your format, write an original story in that format.
 
+Our own results so far (if any): lean toward the hook shapes of our best-performing shorts in this format: {{our_results}}
+
 Shorts we already made (never repeat a premise):
 {{recent_clips}}
 

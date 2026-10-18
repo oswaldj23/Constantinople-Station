@@ -61,6 +61,7 @@ async def run_agent(agent: str, prompt_file: str, ctx: dict, *, dry_run: bool) -
         from . import memory
         ctx = {**ctx, "mission": mission.state(ctx["_ledger"]), "station": config.STATION_NAME, "_bays": ctx["_ledger"].bays(),
                "memory": memory.digest(ctx["_ledger"]), "winners": ctx["_ledger"].kv_get("winners") or "none yet",
+               "season": __import__("constantinople.calendar", fromlist=["season_note"]).season_note(), "our_results": __import__("constantinople.tools.signal", fromlist=["our_results"]).our_results(ctx["_ledger"]), "product_type": __import__("constantinople.tools.printify", fromlist=["next_product"]).next_product(ctx["_ledger"]),
                "mother": config.MOTHER_NAME, "assigned_format": __import__("constantinople.tools.signal", fromlist=["next_format"]).next_format(ctx["_ledger"]), "recent_clips": [c["title"] for c in __import__("constantinople.tools.signal", fromlist=["recent_clips"]).recent_clips(ctx["_ledger"], 10)] or "none yet",
                "latest_listing": (lambda a: {"title": a[0]["title"], "description": (a[0]["payload"].get("listing_draft") or {}).get("description", "")} if a else "none yet")(ctx["_ledger"].artifacts(kind_filter="listing", limit=1))}
     except Exception:
@@ -92,13 +93,14 @@ def canned(prompt_file: str, ctx: dict) -> dict:
     if "research" in prompt_file:
         movers = [{"concept": f"{random.choice(ADJ)} {random.choice(SUBJ)} {random.choice(PROD)}",
                    "wow_change_pct": random.randint(12, 61), "price_band": [18, 34], "confidence": random.randint(76, 94)} for _ in range(5)]
+        occ = (ctx.get("season") or "").split(" in ")[0].replace("Upcoming occasions (design for the nearest ones that are not too late): ", "") if "Upcoming" in (ctx.get("season") or "") else "none"
         return {"summary": f"{len(movers)} movers above threshold; top: {movers[0]['concept']} +{movers[0]['wow_change_pct']}%",
-                "movers": movers, "brief": {"concept": movers[0]["concept"], "audience": "gift buyers, 25-44", "angle": "soft, hand-drawn, two-colour", "avoid": "any named brand, character or existing listing's art"}}
+                "movers": movers, "brief": {"concept": movers[0]["concept"], "occasion": occ, "audience": "gift buyers, 25-44", "angle": "soft, hand-drawn, two-colour", "avoid": "any named brand, character or existing listing's art"}}
     if "trend" in prompt_file:
         brief = (ctx.get("research") or {}).get("brief") or {"concept": name}
-        return {"summary": f"Brief locked: {brief['concept']}", "concept": brief["concept"],
+        return {"summary": f"Brief locked: {brief['concept']} ({ctx.get('product_type','tee')})", "concept": brief["concept"], "occasion": brief.get("occasion", "none"),
                 "design_prompt": f"flat hand-drawn illustration of a {brief['concept'].replace(' tee','').replace(' mug','')}, two-colour, cream and sage, lots of negative space, no text",
-                "products": ["tee", "mug", "tote"]}
+                "products": [ctx.get("product_type", "tee")]}
     if "clip_review" in prompt_file:
         r = ctx.get("render") or {}
         ok = bool(r.get("file")) and 10 <= float(r.get("duration") or 0) <= 60
@@ -153,8 +155,8 @@ def canned(prompt_file: str, ctx: dict) -> dict:
     if "listing_review" in prompt_file:
         return {"summary": "Reviewed: ship it", "verdict": random.choice(["approve", "approve", "approve", "reject"]), "reason": "concept matches the brief; title is specific; disclosure present", "fixes": []}
     if "listing" in prompt_file:
-        concept = (ctx.get("trend_scan") or {}).get("concept", name)
-        return {"summary": f"Listing drafted: \"{concept.title()}\"", "title": f"{concept.title()} | Illustrated Gift Tee | Soft Unisex",
+        concept = (ctx.get("trend_scan") or {}).get("concept", name); plabel = (ctx.get("mockup_build") or {}).get("product", "Tee"); occ = (ctx.get("trend_scan") or {}).get("occasion") or "none"
+        return {"summary": f"Listing drafted: \"{concept.title()}\"", "title": f"{concept.title()} {plabel}" + (f" | {occ} Gift" if occ and occ != "none" else " | Illustrated Gift") + " | Soft Unisex",
                 "tags": ["gift for her", "cottagecore", "hand drawn", "botanical", "cozy", "nature lover", "unisex tee", "minimalist", "plant lover", "birthday gift", "aesthetic", "illustrated", "soft"],
                 "description": f"A soft, illustrated {concept} printed on a unisex tee. Made to order, shipped in 3-5 days. Design created with AI tools from our own original prompts and printed on demand.", "price": 24.95}
     if "score" in prompt_file:

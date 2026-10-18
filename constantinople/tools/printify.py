@@ -6,14 +6,52 @@ import base64, random
 from .. import config
 API = "https://api.printify.com/v1"
 
-# Blueprint 6 = Gildan 5000 "Unisex Heavy Cotton Tee", the standard POD tee. Mugs/totes can be added later.
-BLUEPRINTS = {"tee": 6}
-PROVIDER_PREF = ["SwiftPOD", "Monster Digital", "Printify Choice", "Print Geek", "Underground Threads"]
-LIGHT = {"White", "Natural", "Sand", "Ash", "Ice Grey", "Light Blue", "Light Pink", "Sport Grey"}
-DARK = {"Black", "Navy", "Dark Heather", "Charcoal", "Forest Green", "Maroon"}
+# Product types the shop rotates through. Blueprints are found in Printify's catalog by title keywords
+# (ids differ by region/time); the `fallback` id is the well-known one. Prices are retail, in cents.
+PRODUCTS = {
+    "tee":        {"titles": ["Unisex Heavy Cotton Tee"], "fallback": 6,  "price": {"default": 2495, "2XL": 2695, "3XL": 2895}, "label": "T-Shirt", "scale": 0.85, "y": 0.4},
+    "sweatshirt": {"titles": ["Unisex Heavy Blend", "Crewneck Sweatshirt"], "fallback": 49, "price": {"default": 3995, "2XL": 4295, "3XL": 4495}, "label": "Sweatshirt", "scale": 0.75, "y": 0.42},
+    "hoodie":     {"titles": ["Unisex Heavy Blend", "Hooded Sweatshirt"], "fallback": 77, "price": {"default": 4495, "2XL": 4795, "3XL": 4995}, "label": "Hoodie", "scale": 0.7, "y": 0.45},
+    "mug":        {"titles": ["Ceramic Mug", "11oz"], "fallback": 68, "price": {"default": 1695, "15oz": 1995}, "label": "Mug", "scale": 0.9, "y": 0.5},
+    "tote":       {"titles": ["Tote Bag"], "fallback": 1086, "price": {"default": 1995}, "label": "Tote Bag", "scale": 0.8, "y": 0.5},
+}
+ROTATION = [p.strip() for p in (__import__("os").getenv("PRODUCT_ROTATION") or "tee,sweatshirt,mug,tee,tote,hoodie").split(",") if p.strip() in PRODUCTS] or ["tee"]
+PROVIDER_PREF = ["SwiftPOD", "Monster Digital", "Printify Choice", "Print Geek", "Underground Threads", "District Photo", "Dream Junction"]
+LIGHT = {"White", "Natural", "Sand", "Ash", "Ice Grey", "Light Blue", "Light Pink", "Sport Grey", "Oatmeal Heather"}
+DARK = {"Black", "Navy", "Dark Heather", "Charcoal", "Forest Green", "Maroon", "Dark Chocolate"}
 COLORS = {"White", "Black", "Natural", "Sand", "Sport Grey", "Navy", "Dark Heather"}
 SIZES = ["S", "M", "L", "XL", "2XL"]
-PRICE_CENTS = {"S": 2495, "M": 2495, "L": 2495, "XL": 2495, "2XL": 2695}
+
+
+def next_product(L) -> str:
+    """Which product type this run makes: a fixed rotation (PRODUCT_ROTATION), advanced per listing run."""
+    try:
+        n = L.db.execute("SELECT COUNT(*) c FROM artifacts WHERE kind='listing'").fetchone()["c"]
+    except Exception:
+        n = 0
+    return ROTATION[n % len(ROTATION)]
+
+
+_catalog_cache = {}
+async def _find_blueprint(c, ptype: str) -> int:
+    """Look the product type up in Printify's catalog by title keywords (cached), else the known id."""
+    spec = PRODUCTS[ptype]
+    if ptype in _catalog_cache: return _catalog_cache[ptype]
+    try:
+        if "all" not in _catalog_cache:
+            r = await c.get(f"{API}/catalog/blueprints.json"); r.raise_for_status(); _catalog_cache["all"] = r.json()
+        for bp in _catalog_cache["all"]:
+            t = bp.get("title", "")
+            if all(k.lower() in t.lower() for k in spec["titles"]) and ("Gildan" in t or ptype in ("mug", "tote")):
+                _catalog_cache[ptype] = bp["id"]; return bp["id"]
+    except Exception:
+        pass
+    _catalog_cache[ptype] = spec["fallback"]; return spec["fallback"]
+
+
+def _price_for(ptype: str, v: dict) -> int:
+    size = v.get("options", {}).get("size", "")
+    return PRODUCTS[ptype]["price"].get(size, PRODUCTS[ptype]["price"]["default"])
 
 
 def _hdr():
@@ -29,17 +67,21 @@ async def _pick_provider_and_variants(c, blueprint_id: int):
     r = await c.get(f"{API}/catalog/blueprints/{blueprint_id}/print_providers/{provider['id']}/variants.json"); r.raise_for_status()
     allv = r.json().get("variants", [])
     chosen = [v for v in allv if v.get("options", {}).get("color") in COLORS and v.get("options", {}).get("size") in SIZES]
-    if not chosen:  # fall back to the first 5 variants so a listing still goes out
-        chosen = allv[:5]
+    if not chosen:  # mugs/totes: no colour/size grid worth filtering; take what the provider offers (up to 6)
+        chosen = allv[:6]
     return provider, chosen
 
 
 async def create_product(ctx, *, design_from: str = "design_draft.files", products=("tee",), dry_run: bool = True, **_):
     concept = (ctx.get("trend_scan") or {}).get("concept", "design")
+    # which product: the trend scan may name one (from the rotation shown to it); else the rotation itself
+    wanted = [p for p in ((ctx.get("trend_scan") or {}).get("products") or []) if p in PRODUCTS]
+    ptype = wanted[0] if wanted else (next_product(ctx["_ledger"]) if ctx.get("_ledger") is not None else "tee")
+    spec = PRODUCTS[ptype]
     if dry_run or not config.PRINTIFY_API_KEY:
         pid = f"pf_{random.randint(100000, 999999)}"
-        return {"product_id": pid, "mockups": [f"https://example.invalid/mockup/{pid}/{p}.png" for p in products],
-                "cost": 0.0, "summary": f"Mockups built for {', '.join(products)} ({pid})"}
+        return {"product_id": pid, "product": spec["label"], "type": ptype, "provider": "sample", "mockups": [f"https://example.invalid/mockup/{pid}/{ptype}.png"],
+                "cost": 0.0, "summary": f"Mockups built for {spec['label'].lower()} ({pid})"}
     import httpx
     files = _lookup(ctx, design_from) or []
     if not files: return {"summary": "no design file", "incident": "Mockup build skipped · no design file from Design draft", "cost": 0.0}
@@ -53,21 +95,22 @@ async def create_product(ctx, *, design_from: str = "design_draft.files", produc
             if up.status_code >= 400: return {"summary": "upload failed", "incident": f"Print partner rejected the design upload · {up.status_code} {up.text[:120]}", "cost": 0.0}
             ids[label] = up.json()["id"]
         light_id = ids.get("light"); dark_id = ids.get("dark", light_id)
-        provider, variants = await _pick_provider_and_variants(c, BLUEPRINTS["tee"])
+        bp = await _find_blueprint(c, ptype)
+        provider, variants = await _pick_provider_and_variants(c, bp)
         light_v = [v["id"] for v in variants if v.get("options", {}).get("color") not in DARK]
         dark_v = [v["id"] for v in variants if v.get("options", {}).get("color") in DARK]
-        areas = []
-        if light_v: areas.append({"variant_ids": light_v, "placeholders": [{"position": "front", "images": [{"id": light_id, "x": 0.5, "y": 0.4, "scale": 0.85, "angle": 0}]}]})
-        if dark_v: areas.append({"variant_ids": dark_v, "placeholders": [{"position": "front", "images": [{"id": dark_id, "x": 0.5, "y": 0.4, "scale": 0.85, "angle": 0}]}]})
-        body = {"title": concept.title()[:140], "description": f"{concept}. Made to order.", "blueprint_id": BLUEPRINTS["tee"], "print_provider_id": provider["id"],
-                "variants": [{"id": v["id"], "price": PRICE_CENTS.get(v.get("options", {}).get("size", "M"), 2495), "is_enabled": True} for v in variants],
+        areas = []; place = {"x": 0.5, "y": spec["y"], "scale": spec["scale"], "angle": 0}
+        if light_v: areas.append({"variant_ids": light_v, "placeholders": [{"position": "front", "images": [{"id": light_id, **place}]}]})
+        if dark_v: areas.append({"variant_ids": dark_v, "placeholders": [{"position": "front", "images": [{"id": dark_id, **place}]}]})
+        body = {"title": f"{concept.title()} {spec['label']}"[:140], "description": f"{concept}. Made to order.", "blueprint_id": bp, "print_provider_id": provider["id"],
+                "variants": [{"id": v["id"], "price": _price_for(ptype, v), "is_enabled": True} for v in variants],
                 "print_areas": areas}
         r = await c.post(f"{API}/shops/{config.PRINTIFY_SHOP_ID}/products.json", json=body)
         if r.status_code >= 400: return {"summary": "product create failed", "incident": f"Print partner could not create the product · {r.status_code} {r.text[:160]}", "cost": 0.0}
         p = r.json()
         mockups = [i["src"] for i in p.get("images", []) if i.get("src")]
-        return {"product_id": p["id"], "mockups": mockups, "provider": provider["title"], "variants": len(variants), "cost": 0.0,
-                "summary": f"Product {p['id']} built · {provider['title']} · {len(variants)} size/colour variants · {len(mockups)} mockups"}
+        return {"product_id": p["id"], "product": spec["label"], "type": ptype, "mockups": mockups, "provider": provider["title"], "variants": len(variants), "cost": 0.0,
+                "summary": f"{spec['label']} {p['id']} built · {provider['title']} · {len(variants)} variants · {len(mockups)} mockups"}
 
 
 async def update_listing(ctx, *, product_from: str = "mockup_build.product_id", listing_from: str = "listing_draft", dry_run: bool = True, **_):

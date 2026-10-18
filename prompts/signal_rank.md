@@ -6,6 +6,7 @@ Scan (per genre: top views this week, median views, supply = how many shorts wer
 Story market (the most upvoted story posts today, by format — these are PREMISES the audience is responding to, not scripts): {{story_scan}}
 
 Our own channel so far: {{channel}}
+What OUR shorts did by format (views per video, best hook per format) — weigh this heavily once there are 8+ videos with numbers; what works for this channel beats what works for the market: {{our_results}}
 Mission: {{mission}}
 
 The Forge can make: narrated stories over moving backgrounds (formats horror, aita, revenge, story), facts shorts, and rarely a product short for our Etsy shop. It cannot film people or use anyone else's footage, and every story must be original.

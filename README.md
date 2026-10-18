@@ -66,6 +66,16 @@ It asks four questions (station name, your name, Mother's autonomy, daily cap), 
 
 For unattended running set `AUTONOMY=full` and a `DAILY_SPEND_CAP` you are comfortable losing on a bad day. Mother will handle everything inside those limits and park the rest in escalations for when you check in.
 
+## Volume, the calendar and orders by email
+
+**The shop calendar** (`constantinople/calendar.py`): Research and Production know what is coming — Halloween, Thanksgiving, Black Friday, Christmas, Valentine's, Mother's/Father's Day, graduation, back-to-school and the rest — how many days are left, and whether a design can still ship in time (POD needs ~12 days). Briefs target the nearest occasion that is not too late, as gifts for a specific person, which is what sells on Etsy.
+
+**Volume**: `LISTINGS_PER_DAY` (default 2) sets how many listings Production makes a day; `PRODUCT_ROTATION` (default `tee,sweatshirt,mug,tee,tote,hoodie`) cycles the product type per listing, with per-type prices and print placement. Printify's catalog is searched by title for each type, with known blueprint ids as fallback.
+
+**Orders by email**: the inbox poller recognises Fiverr and Etsy order emails. An order whose text mentions a short/video/clip goes to the Clip Forge's order queue; one mentioning a thumbnail goes to the Studio. The order id, buyer, amount and the requirements text are carried into the run, and Treasury books the payout on delivery. So listing "custom 30–60 s short" on Fiverr or as an Etsy digital service is enough to put the Forge to work.
+
+**Learning from our own channel**: the Signal Deck stores our YouTube video stats and joins them to the Forge's archive (format and hook per upload). Once eight or more shorts have view counts, the format rotation shifts: two picks in three go to the formats our channel's numbers favour, one in three explores the least-tried format; the writer sees the best-performing hooks in its format.
+
 ## The Clip Forge and the Signal Deck
 
 The Forge makes vertical shorts the way the channels that actually get watched do — **original stories over a moving background with big word-timed captions** — and sells the same thing as a service.
