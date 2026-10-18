@@ -9,6 +9,7 @@
   python -m constantinople etsy-auth              one-time Etsy login (stores tokens in .env)
   python -m constantinople youtube-auth           one-time YouTube login so the Clip Forge can post
   python -m constantinople youtube-check          does the stored YouTube login still work?
+  python -m constantinople footage URL            pull a free-to-use gameplay video into footage/ and record its credit
   python -m constantinople clip --niche "coffee shop" --brief "..." --cta "..."   order a short (needs serve running)
 """
 import argparse, asyncio, json, sys
@@ -28,10 +29,25 @@ def main(argv=None):
     p = sub.add_parser("reject"); p.add_argument("id", type=int)
     sub.add_parser("tail")
     sub.add_parser("etsy-auth"); sub.add_parser("youtube-auth"); sub.add_parser("youtube-check")
+    p = sub.add_parser("footage"); p.add_argument("url"); p.add_argument("--credit", default=None, help="credit line (default: the uploader's channel name)")
     p = sub.add_parser("clip"); p.add_argument("--niche", default="small business"); p.add_argument("--brief", default=""); p.add_argument("--cta", default="Link in bio."); p.add_argument("--amount", type=float, default=config.CLIP_PRICE)
     a = ap.parse_args(argv)
     base = f"http://{config.HOST}:{config.PORT}"
 
+    if a.cmd == "footage":
+        import subprocess, json as _j, shutil as _sh
+        d = config.ROOT / "footage"; d.mkdir(exist_ok=True)
+        if not _sh.which("yt-dlp"): subprocess.run([sys.executable, "-m", "pip", "install", "-q", "yt-dlp"])
+        info = subprocess.run(["yt-dlp", "-J", "--no-playlist", a.url], capture_output=True, text=True)
+        if info.returncode != 0: sys.exit("could not read that video: " + info.stderr[-300:])
+        meta = _j.loads(info.stdout); credit = a.credit or (meta.get("uploader") or meta.get("channel") or "") ; title = meta.get("title", "")
+        print(f"Downloading: {title}\n  credit: {credit}")
+        r = subprocess.run(["yt-dlp", "--no-playlist", "-f", "bv*[height<=1080][ext=mp4]/b[height<=1080]/b", "--merge-output-format", "mp4", "-o", str(d / "%(id)s.%(ext)s"), a.url])
+        if r.returncode != 0: sys.exit("download failed")
+        fname = f"{meta.get('id')}.mp4"
+        with open(d / "CREDITS.txt", "a") as fh: fh.write(f"{fname} | {credit} (YouTube) · {title[:80]}\n")
+        print(f"Saved footage/{fname} · credit recorded. The Forge will use it from the next short. Remember: only videos whose uploader allows reuse.")
+        return
     if a.cmd == "youtube-check":
         from .tools.youtube import check; r = check()
         print(f"YouTube: OK · channel '{r['channel']}' · {r.get('subscribers')} subscribers · {r.get('videos')} videos" if r["ok"] else f"YouTube: NOT working · {r['error']}"); return

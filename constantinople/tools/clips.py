@@ -180,6 +180,18 @@ async def scenes(ctx, *, script_from: str = "script", dry_run: bool = True, **_)
 
 
 # ── 2b. background video (story formats) ────────────────────────────────
+def footage_credit(name: str) -> str | None:
+    """footage/CREDITS.txt holds one line per file: `filename | credit line`. The credit is shown on the end
+    card and in the upload description, as the footage channels ask."""
+    try:
+        for line in (FOOTAGE_DIR / "CREDITS.txt").read_text().splitlines():
+            if "|" in line:
+                f, cr = [x.strip() for x in line.split("|", 1)]
+                if f == name and cr: return cr
+    except Exception: pass
+    return None
+
+
 def _footage_segment(dur: float, out: Path, exclude: str | None = None) -> str | None:
     """A random slice of the Creator's own footage, cropped to 9:16. Returns the source name or None."""
     if not FOOTAGE_DIR.exists(): return None
@@ -220,7 +232,9 @@ async def background(ctx, *, dry_run: bool = True, **_):
     d = OUT / ctx["run_id"]; d.mkdir(parents=True, exist_ok=True); out = d / "bg.mp4"
     try:
         name = _footage_segment(dur, out)
-        if name: return {"file": str(out), "source": f"footage/{name}", "cost": 0.0, "summary": f"background: your footage ({name})"}
+        if name:
+            cr = footage_credit(name)
+            return {"file": str(out), "source": f"footage/{name}", "credit": cr, "cost": 0.0, "summary": f"background: footage/{name}" + (f" · credit: {cr}" if cr else "")}
         _procedural_bg(F["bg"], dur, out)
         return {"file": str(out), "source": f"generated:{F['bg']}", "cost": 0.0, "summary": f"background: station-generated ({F['bg']}) · drop your own gameplay in footage/ to use it instead"}
     except Exception as e:
@@ -228,7 +242,7 @@ async def background(ctx, *, dry_run: bool = True, **_):
 
 
 # ── 3. captions ──────────────────────────────────────────────────────────
-def _ass(words, duration, path: Path, text_fallback: str, title: str | None = None, accent: str = "&H0073FF3D", story: bool = False):
+def _ass(words, duration, path: Path, text_fallback: str, title: str | None = None, accent: str = "&H0073FF3D", story: bool = False, end_card: str | None = None):
     """Karaoke-style captions: 3 words per card, big, centred, each word lighting up as it is spoken.
     Story formats get a title card (the hook) for the first seconds and captions in the middle of the frame."""
     marginv = 880 if story else 420
@@ -242,12 +256,15 @@ WrapStyle: 2
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Cap,DejaVu Sans,72,&H00FFFFFF,{accent},&H00000000,&H96000000,-1,0,0,0,100,100,1,0,1,7,3,2,80,80,{marginv},1
 Style: Title,DejaVu Sans,60,&H00FFFFFF,&H00FFFFFF,&H00000000,&HA0000000,-1,0,0,0,100,100,0,0,3,14,0,8,90,90,210,1
+Style: End,DejaVu Sans,40,&H00E6E6E6,&H00E6E6E6,&H00000000,&HA0000000,0,0,0,0,100,100,0,0,3,10,0,2,90,90,120,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     def ts(t): h = int(t // 3600); m = int(t % 3600 // 60); s = t % 60; return f"{h}:{m:02d}:{s:05.2f}"
     lines = []
+    if end_card and duration > 6:
+        head += f"Dialogue: 1,{ts(max(0, duration - 3.2))},{ts(duration)},End,,0,0,0,,{{\\fad(200,0)}}{end_card}\n"
     if title:
         tw = textwrap.wrap(title, 24)[:3]
         head += f"Dialogue: 1,{ts(0)},{ts(min(4.5, duration))},Title,,0,0,0,,{{\\fad(120,300)}}{'\\N'.join(tw)}\n"
@@ -286,8 +303,10 @@ async def render(ctx, *, dry_run: bool = True, **_):
         except Exception: bg = None
     if not frames and not bg:
         _compose_frame(None, d / "scene_00.jpg", title=script.get("title") or "Constantinople Station"); frames = [str(d / "scene_00.jpg")]
+    credit = (ctx.get("background") or {}).get("credit")
+    end_bits = (["Part 2 on the channel"] if script.get("part2") else []) + ([f"Gameplay: {credit}"] if credit else [])
     _ass(vo.get("words"), dur, d / "captions.ass", script.get("voiceover") or " ".join(b.get("line", "") for b in script.get("beats", [])),
-         title=(script.get("hook_card") or script.get("title")) if story else None, accent=F["accent"], story=story)
+         title=(script.get("hook_card") or script.get("title")) if story else None, accent=F["accent"], story=story, end_card="\\N".join(end_bits) if end_bits else None)
     sub = str(d / "captions.ass").replace("\\", "/").replace(":", "\\:")
     inputs = []; filt = []
     if bg:
@@ -322,7 +341,7 @@ async def render(ctx, *, dry_run: bool = True, **_):
     except Exception as e:
         return {"summary": "render failed", "incident": f"Render failed · {str(e)[:160]}", "cost": 0.0}
     size = out.stat().st_size / 1e6
-    return {"file": str(out), "thumb": str(d / "thumb.jpg"), "duration": dur, "size_mb": round(size, 1), "format": script.get("format") or ("product" if script.get("kind") == "product" else "story"), "cost": 0.0,
+    return {"file": str(out), "thumb": str(d / "thumb.jpg"), "duration": dur, "size_mb": round(size, 1), "credit": credit, "format": script.get("format") or ("product" if script.get("kind") == "product" else "story"), "cost": 0.0,
             "summary": f"rendered {dur:.0f}s · {'background video' if bg else str(n) + ' scenes'} · captions {'word-timed' if vo.get('words') else 'estimated'} · {size:.1f} MB"}
 
 

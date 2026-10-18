@@ -5,6 +5,7 @@ cadence_seconds: 86400         # one scan a day keeps the YouTube quota comforta
 complete_msg: "Signal brief: {title}"
 steps:
   - {id: shorts_scan, name: Shorts scan,   kind: tool,  tool: youtube.scan_shorts, agent: DIAL, emit: trend}
+  - {id: story_scan,  name: Story scan,    kind: tool,  tool: reddit.scan_stories, agent: DIAL, emit: trend}
   - {id: channel,     name: Our channel,   kind: tool,  tool: youtube.channel_stats, agent: DIAL, quiet: true}
   - {id: signal_rank, name: Rank genres,   kind: agent, agent: DIAL, prompt: signal_rank.md}
   - {id: brief,       name: Brief,         kind: tool,  tool: signal.compile_brief, agent: DIAL, share: signal, transfer_to: clips}
