@@ -47,7 +47,7 @@ async def _top(c: httpx.AsyncClient, sub: str, tok: str | None, limit: int = 12)
         age_h = max(0.5, (time.time() - float(d.get("created_utc", time.time()))) / 3600)
         out.append({"sub": sub, "title": d.get("title", "")[:140], "score": int(d.get("score", 0)), "comments": int(d.get("num_comments", 0)),
                     "velocity": round(int(d.get("score", 0)) / age_h, 1), "words": len(body.split()),
-                    "gist": " ".join(body.split())[:420] + ("…" if len(body) > 420 else ""),   # enough to understand the premise, never the story
+                    "gist": " ".join(body.split())[:1600 if sub.lower() not in ("nosleep", "letsnotmeet", "paranormal", "creepyencounters") else 420] + ("…" if len(body) > 420 else ""),   # real-life posts: enough to retell the situation; fiction: premise only
                     "url": "https://www.reddit.com" + d.get("permalink", "")})
     return out
 

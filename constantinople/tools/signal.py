@@ -13,7 +13,7 @@ async def compile_brief(ctx, *, scan_from: str = "shorts_scan", rank_from: str =
     brief = {"scanned_at": scan.get("scanned_at"), "leaders": [{"genre": g["genre"], "top_views": g["top_views"], "median_views": g["median_views"], "supply": g["supply"], "opportunity": g["opportunity"]} for g in top],
              "picks": picks, "hooks": rank.get("hooks") or [], "avoid": rank.get("avoid") or ["copyrighted gameplay or music you do not own", "reposting other creators' clips", "anything that needs a real person on camera"],
              "product_angle": rank.get("product_angle") or "none",
-             "story_seeds": seeds, "seed_note": "premises only — write your own story, change every name, place and detail, never quote"}
+             "story_seeds": seeds, "seed_note": "aita/revenge/story: retell in our own words with names, places and identifying details changed; horror: premise shape only, write original"}
     L = ctx.get("_ledger")
     if L is not None:
         try: L.kv_set("signal_brief", json.dumps(brief, default=str))
