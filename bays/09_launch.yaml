@@ -2,11 +2,10 @@ id: launch
 name: LAUNCH BAY
 agents: [BEACON, CLIP]
 skip_unless_listings: true     # nothing to post about until the shop has a listing
-cadence_seconds: 7200          # a post every two hours
-complete_msg: "Posted: {title}"
+cadence_seconds: 86400         # one social post draft a day, sent to your phone to paste into Instagram/TikTok/Pinterest
+complete_msg: "Post drafted: {title}"
 steps:
   - {id: queue,    name: Queue,    kind: noop,  summary: "Queue reviewed", agent: BEACON}
   - {id: caption,  name: Caption,  kind: agent, agent: CLIP, prompt: launch_caption.md}
-  - {id: schedule, name: Schedule, kind: tool,  tool: publish.schedule, agent: BEACON, gate: approve_publish, gate_summary: "Launch Bay wants to schedule a post: {title}"}
-  - {id: post,     name: Post,     kind: noop,  summary: "Posted", emit: publish, agent: BEACON}
-  - {id: metrics,  name: Metrics,  kind: tool,  tool: publish.metrics, agent: BEACON}
+  - {id: schedule, name: Draft to bridge, kind: tool,  tool: publish.schedule, agent: BEACON, emit: publish}
+  - {id: metrics,  name: Metrics,  kind: tool,  tool: publish.metrics, agent: BEACON, quiet: true}

@@ -1,17 +1,26 @@
-"""Launch Bay: schedule and post content. Dry run writes the post to output/posts. Real: plug a social
-scheduler API (Buffer, Later, Metricool…) or a browser agent."""
+"""Launch Bay: drafts a social post (caption + hashtags + the newest listing's mockup) and hands it to the
+bridge — Telegram shows it with the image so the Creator can paste it into Instagram/TikTok/Pinterest in
+ten seconds. No scheduler API is wired (none is free and reliable); the phone is the honest route."""
 import json, random
 from .. import config
 
 async def schedule(ctx, *, caption_from: str = "caption.caption", dry_run: bool = True, **_):
     caption = _lookup(ctx, caption_from) or ""
+    tags = " ".join((ctx.get("caption") or {}).get("hashtags") or [])
     out = config.ROOT / "output" / "posts"; out.mkdir(parents=True, exist_ok=True)
+    image = None
+    try:
+        from .clips import latest_assets_from_listing
+        a = latest_assets_from_listing(ctx["_ledger"]); image = (a.get("mockups") or [None])[0] or (a.get("designs") or [None])[0]
+    except Exception: pass
+    draft = (caption + ("\n\n" + tags if tags else "")).strip()
     p = out / f"{ctx['run_id']}.json"
-    p.write_text(json.dumps({"caption": caption, "when": "next peak window", "assets": ctx.get("assets", [])}, indent=2))
-    return {"post_file": str(p), "cost": 0.0, "summary": random.choice(["Scheduled for peak window", "Queued behind 2 posts", "Scheduled: product photos + clip"])}
+    p.write_text(json.dumps({"caption": caption, "hashtags": tags, "image": image}, indent=2))
+    return {"post_file": str(p), "draft": draft, "image": image, "cost": 0.0, "summary": "Post drafted and sent to the bridge" if draft else "Nothing to draft"}
 
 async def metrics(ctx, *, dry_run: bool = True, **_):
-    return {"ctr": round(random.uniform(2, 7), 1), "cost": 0.0, "summary": f"Metrics pulled · CTR {random.uniform(2,7):.1f}%"}
+    if dry_run: return {"ctr": round(random.uniform(2, 7), 1), "cost": 0.0, "summary": f"Metrics (simulated) · CTR {random.uniform(2,7):.1f}%"}
+    return {"cost": 0.0, "summary": "No social metrics source wired · skipped"}
 
 def _lookup(ctx, path):
     cur = ctx

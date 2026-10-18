@@ -104,7 +104,8 @@ class Runner:
                 except Exception: pass
             L.emit(bay.id, "poll" if st.get("quiet") else "step", f"{st['name']}: {result.get('summary','done')}", step=i + 1, agent=agent, amount=cost or None, run_id=run_id)
             if st.get("emit"):            # extra event kinds a step can raise (trend, publish, message…)
-                L.emit(bay.id, st["emit"], result.get("summary", st["name"]), agent=agent, run_id=run_id, **({"to": st["to"]} if st.get("to") else {}))
+                extra = {k: result[k] for k in ("draft", "image", "url") if result.get(k)}
+                L.emit(bay.id, st["emit"], result.get("summary", st["name"]), agent=agent, run_id=run_id, **({"to": st["to"]} if st.get("to") else {}), **extra)
             if st.get("transfer_to"):
                 L.emit(bay.id, "transfer", f"{agent} carries {st['name'].lower()} to {st['transfer_to']}", agent=agent, run_id=run_id, to=st["transfer_to"])
             # hand sub-events to other bays (orders, messages, sales)
@@ -185,6 +186,8 @@ def _title(ctx: dict) -> str:
         return dr["brief"]["concept"]
     if isinstance(ctx.get("brief"), dict) and ctx["brief"].get("picks"):
         return ", ".join(p.get("genre", "") for p in ctx["brief"]["picks"][:3])
+    if isinstance(ctx.get("caption"), dict) and ctx["caption"].get("caption"):
+        return str(ctx["caption"]["caption"])[:70]
     if isinstance(ctx.get("script"), dict) and ctx["script"].get("title"):
         return str(ctx["script"]["title"])
     for k in ("listing_draft", "trend_scan", "draft_reply", "caption"):

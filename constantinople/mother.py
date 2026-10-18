@@ -29,6 +29,7 @@ class Mother:
     async def start(self):
         self._loop = asyncio.get_running_loop()
         self.say(f"{self.name} online · autonomy {config.AUTONOMY.upper()} · daily spend cap ${config.DAILY_SPEND_CAP:.2f} · reporting to {config.CREATOR}")
+        self.stalled: dict = {}
         asyncio.create_task(self._sweep())
 
     def _on_event(self, ev: dict):
@@ -109,11 +110,13 @@ class Mother:
                 for b in self.orch.bays.values():
                     st = self.L.bay(b.id)
                     if st.get("status") not in ("running", "boost") or b.trigger == "event" or not st.get("last_run"): continue
-                    last = self.L.db.execute("SELECT MAX(ts) t FROM events WHERE bay=? AND kind IN ('complete','step','poll')", (b.id,)).fetchone()["t"]
+                    if any(a["bay"] == b.id for a in self.L.approvals("pending")): continue   # waiting on the Creator is not a stall
+                    last = self.L.db.execute("SELECT MAX(ts) t FROM events WHERE bay=? AND kind IN ('complete','step','poll','status','incident')", (b.id,)).fetchone()["t"]
                     if last:
                         age = (now - datetime.fromisoformat(last.replace("Z", "+00:00"))).total_seconds()
-                        if age > 3 * b.cadence / config.SPEED + 60:
-                            self.L.emit(b.id, "incident", f"Stalled · no completed run in {int(age)}s (cadence {int(b.cadence/config.SPEED)}s)", agent=self.name)
+                        if age > 3 * b.cadence / config.SPEED + 60 and self.stalled.get(b.id) != last:
+                            self.stalled[b.id] = last
+                            self.L.emit(b.id, "incident", f"Stalled · no activity in {int(age)}s (cadence {int(b.cadence/config.SPEED)}s)", agent=self.name)
                 m = mission.state(self.L)
                 if k % 6 == 0: self.say(f"Watch · all bays checked · ${m['banked']:,.2f} banked · {m['velocity_per_day']:,.2f}/sol · leg {m['leg']:02d} to {m['next_waypoint']['name']}", velocity_per_day=m["velocity_per_day"])
             except Exception:

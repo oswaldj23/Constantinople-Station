@@ -84,11 +84,39 @@ async def channel_stats(ctx, *, dry_run: bool = True, **_):
 
 
 # ── Clip Forge: upload ───────────────────────────────────────────────────
+def _creds() -> tuple:
+    """Always read the latest values from .env, so a re-run of youtube-auth takes effect without a restart."""
+    import re
+    vals = {"YOUTUBE_CLIENT_ID": config.YOUTUBE_CLIENT_ID, "YOUTUBE_CLIENT_SECRET": config.YOUTUBE_CLIENT_SECRET, "YOUTUBE_REFRESH_TOKEN": config.YOUTUBE_REFRESH_TOKEN}
+    try:
+        for line in (config.ROOT / ".env").read_text().splitlines():
+            m = re.match(r"^(YOUTUBE_CLIENT_ID|YOUTUBE_CLIENT_SECRET|YOUTUBE_REFRESH_TOKEN)=(.*)$", line.strip())
+            if m and m.group(2).strip(): vals[m.group(1)] = m.group(2).strip()
+    except Exception: pass
+    return vals["YOUTUBE_CLIENT_ID"], vals["YOUTUBE_CLIENT_SECRET"], vals["YOUTUBE_REFRESH_TOKEN"]
+
+
+LAST_AUTH_ERROR = {"msg": ""}
+
 def access_token() -> str | None:
-    if not (config.YOUTUBE_CLIENT_ID and config.YOUTUBE_CLIENT_SECRET and config.YOUTUBE_REFRESH_TOKEN): return None
-    r = httpx.post(TOKEN_URL, data={"client_id": config.YOUTUBE_CLIENT_ID, "client_secret": config.YOUTUBE_CLIENT_SECRET, "refresh_token": config.YOUTUBE_REFRESH_TOKEN, "grant_type": "refresh_token"}, timeout=30)
-    if r.status_code != 200: return None
+    cid, sec, rt = _creds()
+    if not (cid and sec and rt): LAST_AUTH_ERROR["msg"] = "YouTube not linked (run youtube-auth)"; return None
+    r = httpx.post(TOKEN_URL, data={"client_id": cid, "client_secret": sec, "refresh_token": rt, "grant_type": "refresh_token"}, timeout=30)
+    if r.status_code != 200:
+        err = r.json().get("error_description") or r.json().get("error") or r.text[:100] if r.headers.get("content-type", "").startswith("application/json") else r.text[:100]
+        LAST_AUTH_ERROR["msg"] = f"{r.status_code} {err}"; return None
+    LAST_AUTH_ERROR["msg"] = ""
     return r.json().get("access_token")
+
+
+def check() -> dict:
+    """Used by `python -m constantinople youtube-check`: does the stored login still work, and which channel is it?"""
+    tok = access_token()
+    if not tok: return {"ok": False, "error": LAST_AUTH_ERROR["msg"]}
+    ch = httpx.get(f"{API}/channels", params={"part": "snippet,statistics", "mine": "true"}, headers={"Authorization": f"Bearer {tok}"}, timeout=30)
+    items = ch.json().get("items", []) if ch.status_code == 200 else []
+    if not items: return {"ok": False, "error": "login works but this Google account has no YouTube channel — create one on youtube.com, then run youtube-auth again"}
+    it = items[0]; return {"ok": True, "channel": it["snippet"]["title"], "id": it["id"], "subscribers": it["statistics"].get("subscriberCount"), "videos": it["statistics"].get("videoCount")}
 
 
 async def upload(ctx, *, dry_run: bool = True, privacy: str = "public", **_):
@@ -98,10 +126,13 @@ async def upload(ctx, *, dry_run: bool = True, privacy: str = "public", **_):
     title = (sc.get("title") or "New from the Forge")[:95]
     if "#shorts" not in title.lower(): title = (title[:87] + " #Shorts")
     desc = (sc.get("caption") or "") + "\n\n" + " ".join("#" + h.strip("#") for h in sc.get("hashtags", [])) + "\n\nMade by " + config.STATION_NAME + "."
-    if dry_run or not config.YOUTUBE_REFRESH_TOKEN:
+    if dry_run or not _creds()[2]:
         return {"url": f"https://youtube.com/shorts/dryrun_{ctx['run_id'][-6:]}", "video_id": None, "cost": 0.0, "summary": f"upload skipped ({'dry run' if dry_run else 'YouTube not linked'}) · file kept at {Path(r['file']).name}"}
     tok = access_token()
-    if not tok: return {"summary": "youtube auth failed", "incident": "YouTube refresh token rejected · run `python -m constantinople youtube-auth` again", "cost": 0.0}
+    if not tok:
+        why = LAST_AUTH_ERROR["msg"]
+        hint = "the app's consent screen is in Testing so the login expired after 7 days, or the login was revoked" if "invalid_grant" in why else why
+        return {"summary": "youtube login rejected", "incident": f"YouTube login rejected ({hint}) · the clip is saved · fix: on the server run `cd /opt/constantinople && .venv/bin/python -m constantinople youtube-auth`", "cost": 0.0}
     meta = {"snippet": {"title": title, "description": desc[:4900], "tags": [h.strip("#") for h in sc.get("hashtags", [])][:15], "categoryId": "22"},
             "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False}}
     size = Path(r["file"]).stat().st_size

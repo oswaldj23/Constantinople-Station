@@ -8,6 +8,7 @@
   python -m constantinople tail                   print the event stream
   python -m constantinople etsy-auth              one-time Etsy login (stores tokens in .env)
   python -m constantinople youtube-auth           one-time YouTube login so the Clip Forge can post
+  python -m constantinople youtube-check          does the stored YouTube login still work?
   python -m constantinople clip --niche "coffee shop" --brief "..." --cta "..."   order a short (needs serve running)
 """
 import argparse, asyncio, json, sys
@@ -26,11 +27,14 @@ def main(argv=None):
     p = sub.add_parser("approve"); p.add_argument("id", type=int)
     p = sub.add_parser("reject"); p.add_argument("id", type=int)
     sub.add_parser("tail")
-    sub.add_parser("etsy-auth"); sub.add_parser("youtube-auth")
+    sub.add_parser("etsy-auth"); sub.add_parser("youtube-auth"); sub.add_parser("youtube-check")
     p = sub.add_parser("clip"); p.add_argument("--niche", default="small business"); p.add_argument("--brief", default=""); p.add_argument("--cta", default="Link in bio."); p.add_argument("--amount", type=float, default=config.CLIP_PRICE)
     a = ap.parse_args(argv)
     base = f"http://{config.HOST}:{config.PORT}"
 
+    if a.cmd == "youtube-check":
+        from .tools.youtube import check; r = check()
+        print(f"YouTube: OK · channel '{r['channel']}' · {r.get('subscribers')} subscribers · {r.get('videos')} videos" if r["ok"] else f"YouTube: NOT working · {r['error']}"); return
     if a.cmd == "youtube-auth":
         from .youtube_auth import main as yt; yt(); return
     if a.cmd == "clip":

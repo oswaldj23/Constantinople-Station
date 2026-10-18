@@ -70,9 +70,13 @@ class Telegram:
         text = None; buttons = None
         if k == "status" and ev.get("approval") and msg.startswith("Awaiting approval"):
             aid = ev["approval"]
+            a = self.L.approval(aid)
+            if a and a.get("gate") == "escalation":
+                text = f"🚨 <b>MOTHER needs you</b> (#{aid})\n{a.get('summary','').split(':',1)[-1].strip()}"
+                buttons = [[{"text": "👍 Acknowledged", "callback_data": f"approve:{aid}"}]]
+                self._loop.call_soon_threadsafe(lambda: asyncio.create_task(self.send(text, buttons))); return
             text = f"🛎 <b>Approval #{aid}</b>\n{msg.split(':',1)[1].strip()}"
             buttons = [[{"text": "✅ Approve", "callback_data": f"approve:{aid}"}, {"text": "❌ Reject", "callback_data": f"reject:{aid}"}]]
-            a = self.L.approval(aid)
             try:
                 payload = json.loads(a.get("payload") or "{}") if a else {}
                 files = (payload.get("design_draft") or {}).get("files") or []
@@ -84,7 +88,11 @@ class Telegram:
                     for m in mocks[:2]: await self.send_photo(m, "Mockup")
                 self._loop.call_soon_threadsafe(lambda: asyncio.create_task(_pics()))
             except Exception: pass
-        elif k == "mother" and ("ESCALATED" in msg or "Declined" in msg):
+        elif k == "mother" and ev.get("approval") and "ESCALATED" in msg:
+            aid = ev["approval"]
+            text = f"🚨 <b>MOTHER needs you</b> (#{aid})\n{msg.split(':',1)[-1].strip()}"
+            buttons = [[{"text": "👍 Acknowledged", "callback_data": f"approve:{aid}"}]]
+        elif k == "mother" and "Declined" in msg:
             text = f"🚨 <b>MOTHER</b>\n{msg}"
         elif k == "mission" and "WAYPOINT REACHED" in msg:
             text = f"🌟 <b>{msg}</b>"
@@ -107,6 +115,11 @@ class Telegram:
             text = f"⚠️ <b>{ev.get('bay','').upper()}</b> · {msg}"
         elif k == "reply" and ev.get("draft"):
             text = f"✉️ <b>HERALD drafted a reply</b> — copy it into Etsy:\n\n<code>{ev['draft'][:1500]}</code>"
+        elif k == "publish" and ev.get("bay") == "launch" and ev.get("draft"):
+            text = f"📣 <b>Post ready</b> — copy into Instagram / TikTok / Pinterest with the picture:\n\n<code>{ev['draft'][:1500]}</code>"
+            if ev.get("image"):
+                img = ev["image"]
+                self._loop.call_soon_threadsafe(lambda: asyncio.create_task(self.send_photo(img, "Post image") if str(img).startswith("http") else self.send_photo_file(img, "Post image")))
         if text:
             self._loop.call_soon_threadsafe(lambda: asyncio.create_task(self.send(text, buttons)))
 
