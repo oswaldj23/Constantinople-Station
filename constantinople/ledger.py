@@ -169,9 +169,11 @@ class Ledger:
             self.db.commit()
             return cur.lastrowid
 
-    def artifacts(self, bay: Optional[str] = None, limit: int = 20) -> list[dict]:
-        q, args = "SELECT * FROM artifacts", []
-        if bay: q += " WHERE bay=?"; args.append(bay)
+    def artifacts(self, bay: Optional[str] = None, limit: int = 20, kind_filter: Optional[str] = None) -> list[dict]:
+        q, args, conds = "SELECT * FROM artifacts", [], []
+        if bay: conds.append("bay=?"); args.append(bay)
+        if kind_filter: conds.append("kind=?"); args.append(kind_filter)
+        if conds: q += " WHERE " + " AND ".join(conds)
         q += " ORDER BY id DESC LIMIT ?"; args.append(limit)
         out = []
         for r in self.db.execute(q, args):

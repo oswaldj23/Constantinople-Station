@@ -1,6 +1,7 @@
 id: etsy
 name: ETSY PRODUCTION BAY
 agents: [FORGE, MINT, PRESS]
+requires: [research]          # never design without a brief; runs Research first if needed
 cadence_seconds: 86400         # one new listing a day while the shop is young; raise later
 artifact: listing
 complete_msg: "Listing live: {title}"

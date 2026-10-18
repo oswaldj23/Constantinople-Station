@@ -1,6 +1,7 @@
 id: launch
 name: LAUNCH BAY
 agents: [BEACON, CLIP]
+skip_unless_listings: true     # nothing to post about until the shop has a listing
 cadence_seconds: 7200          # a post every two hours
 complete_msg: "Posted: {title}"
 steps:

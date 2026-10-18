@@ -40,6 +40,11 @@ class Runner:
         self.ledger = ledger; self.bays = bays
         self.mother = None
         self.shared: dict[str, Any] = {}     # cross-bay handoffs, e.g. shared["research"] = latest brief
+        try:
+            import json as _j
+            self.shared = _j.loads(ledger.kv_get("shared") or "{}")
+        except Exception:
+            self.shared = {}
         self.waits: dict[int, asyncio.Event] = {}
 
     async def run(self, bay: Bay, seed: Optional[dict] = None) -> dict:
@@ -47,6 +52,18 @@ class Runner:
         run_id = f"{bay.id}-{uuid.uuid4().hex[:8]}"
         ctx: dict[str, Any] = {"run_id": run_id, "bay": bay.id, "_ledger": L, **self.shared}
         if seed: ctx.update(seed)
+        # preconditions: a bay can require another bay's handoff, or skip when the shop has no listings yet
+        for req in bay.spec.get("requires", []):
+            if req not in self.shared:
+                L.emit(bay.id, "status", f"Needs a {req} brief first · running {req}", agent=bay.agents[0] if bay.agents else "MOTHER", run_id=run_id)
+                if req in self.bays:
+                    await self.run(self.bays[req])
+                if req not in self.shared:
+                    L.emit(bay.id, "incident", f"No {req} brief available · run skipped", run_id=run_id); raise Rejected()
+                ctx.update(self.shared)
+        if bay.spec.get("skip_unless_listings") and not L.artifacts(kind_filter="listing", limit=1):
+            L.emit(bay.id, "poll", "Nothing to publish yet · waiting for the first listing", agent=bay.agents[0] if bay.agents else "MOTHER", run_id=run_id)
+            raise Rejected()
         L.bump(bay.id, runs=1)
         for i, st in enumerate(bay.steps):
             state = L.bay(bay.id)
@@ -65,6 +82,9 @@ class Runner:
             ctx[st["id"]] = result
             if st.get("share"):
                 self.shared[st["share"]] = result
+                try:
+                    import json as _j; L.kv_set("shared", _j.dumps(self.shared, default=str))
+                except Exception: pass
             L.emit(bay.id, "poll" if st.get("quiet") else "step", f"{st['name']}: {result.get('summary','done')}", step=i + 1, agent=agent, amount=cost or None, run_id=run_id)
             if st.get("emit"):            # extra event kinds a step can raise (trend, publish, message…)
                 L.emit(bay.id, st["emit"], result.get("summary", st["name"]), agent=agent, run_id=run_id, **({"to": st["to"]} if st.get("to") else {}))

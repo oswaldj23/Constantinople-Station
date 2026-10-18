@@ -53,9 +53,20 @@ class Orchestrator:
             log.exception("bay %s failed", bay.id)
             self.ledger.emit(bay.id, "incident", f"{type(e).__name__}: {str(e)[:140]}", agent="CONSTANTINOPLE")
 
+    def _since_last_complete(self, bay_id: str) -> float | None:
+        from datetime import datetime, timezone
+        r = self.ledger.db.execute("SELECT MAX(ts) t FROM events WHERE bay=? AND kind IN ('complete','step')", (bay_id,)).fetchone()
+        if not r or not r["t"]: return None
+        return (datetime.now(timezone.utc) - datetime.fromisoformat(r["t"].replace("Z", "+00:00"))).total_seconds()
+
     async def _loop(self, bay: Bay):
         q = self.runner.queues.setdefault(bay.id, asyncio.Queue())
         await asyncio.sleep(random.uniform(1, 6) / config.SPEED)
+        # resume the schedule: if this bay ran recently, wait out the rest of its cadence instead of firing on every restart
+        if bay.trigger != "event":
+            age = self._since_last_complete(bay.id)
+            if age is not None and age < bay.cadence / config.SPEED:
+                await asyncio.sleep(bay.cadence / config.SPEED - age)
         while True:
             state = self.ledger.bay(bay.id)
             if state.get("status") == "standby":
