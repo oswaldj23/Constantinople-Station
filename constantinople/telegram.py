@@ -81,7 +81,7 @@ class Telegram:
             text = f"💰 {msg}"
         elif k == "complete" and ev.get("bay") == "etsy":
             text = f"🛍 <b>Listing live</b> · {msg}"
-        elif k == "incident" and ev.get("bay") != "core":
+        elif k == "incident" and ev.get("bay") != "core" and config.TELEGRAM_VERBOSITY == "normal":
             text = f"⚠️ <b>{ev.get('bay','').upper()}</b> · {msg}"
         elif k == "reply" and ev.get("draft"):
             text = f"✉️ <b>HERALD drafted a reply</b> — copy it into Etsy:\n\n<code>{ev['draft'][:1500]}</code>"
@@ -96,7 +96,7 @@ class Telegram:
         self.L.subscribe(self.on_event)
         asyncio.create_task(self._poll())
         asyncio.create_task(self._daily())
-        if self.chat: await self.send(f"🛰 <b>{config.STATION_NAME}</b> engine online · {config.MOTHER_NAME} reporting to {config.CREATOR}.\nType /help for commands.")
+        if self.chat and config.TELEGRAM_VERBOSITY == "normal": await self.send(f"🛰 <b>{config.STATION_NAME}</b> engine online · {config.MOTHER_NAME} reporting to {config.CREATOR}.")
 
     async def _poll(self):
         while True:
@@ -136,7 +136,7 @@ class Telegram:
     async def command(self, text: str):
         parts = text.split(); cmd = parts[0].lower().lstrip("/"); arg = parts[1] if len(parts) > 1 else None
         if cmd in ("help", "h"):
-            await self.send("<b>Bridge commands</b>\n/status · /approvals · /approve N · /reject N\n/hold BAY · /boost BAY · /run BAY\n/report · /mother · /listings")
+            await self.send("<b>Bridge commands</b>\n/status · /approvals · /approve N · /reject N\n/hold BAY · /boost BAY · /run BAY\n/report · /mother · /listings\n/quiet · /normal (how much I message you)")
         elif cmd == "status":
             await self.send(self.status_text())
         elif cmd == "approvals":
