@@ -114,7 +114,7 @@ class Telegram:
             cq = u["callback_query"]; chat = str(cq["message"]["chat"]["id"])
             if chat != str(self.chat): return
             action, aid = cq["data"].split(":"); aid = int(aid)
-            self.orch.runner.decide(aid, "approved" if action == "approve" else "rejected")
+            self.orch.runner.decide(aid, "approved" if action == "approve" else "rejected", config.CREATOR)
             async with httpx.AsyncClient(timeout=20) as c:
                 await c.post(f"{self.api}/answerCallbackQuery", json={"callback_query_id": cq["id"], "text": f"#{aid} {action}d"})
                 await c.post(f"{self.api}/editMessageReplyMarkup", json={"chat_id": chat, "message_id": cq["message"]["message_id"], "reply_markup": {"inline_keyboard": []}})
@@ -147,7 +147,7 @@ class Telegram:
                                 [[{"text": "✅ Approve", "callback_data": f"approve:{a['id']}"}, {"text": "❌ Reject", "callback_data": f"reject:{a['id']}"}]])
         elif cmd in ("approve", "reject") and arg and arg.isdigit():
             if not self.L.approval(int(arg)): await self.send(f"No approval #{arg}."); return
-            self.orch.runner.decide(int(arg), "approved" if cmd == "approve" else "rejected"); await self.send(f"#{arg} {cmd}d.")
+            self.orch.runner.decide(int(arg), "approved" if cmd == "approve" else "rejected", config.CREATOR); await self.send(f"#{arg} {cmd}d.")
         elif cmd in ("hold", "boost", "wake", "run") and arg:
             bay = arg.lower()
             if bay not in self.orch.bays: await self.send(f"Unknown bay. Bays: {', '.join(self.orch.bays)}"); return

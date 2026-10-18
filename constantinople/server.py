@@ -108,9 +108,9 @@ def artifacts(bay: str | None = None, limit: int = 20):
 
 
 @app.get("/approvals")
-def approvals(status: str = "pending"):
+def approvals(status: str = "pending", limit: int = 200):
     rows = []
-    for a in ledger.approvals(status):
+    for a in ledger.approvals(status, limit):
         try: payload = json.loads(a.get("payload") or "{}")
         except Exception: payload = {}
         dd = payload.get("design_draft") or {}
@@ -159,7 +159,7 @@ def mother():
 def decide(aid: int, decision: str):
     if decision not in ("approve", "reject"): raise HTTPException(400, "approve|reject")
     if not ledger.approval(aid): raise HTTPException(404)
-    orch.runner.decide(aid, "approved" if decision == "approve" else "rejected")
+    orch.runner.decide(aid, "approved" if decision == "approve" else "rejected", config.CREATOR)
     return {"ok": True, "id": aid, "status": decision}
 
 

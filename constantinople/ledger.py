@@ -20,6 +20,8 @@ class Ledger:
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self._init()
+        try: self.db.execute("ALTER TABLE approvals ADD COLUMN decided_by TEXT"); self.db.commit()
+        except Exception: pass
         self._listeners: list = []
 
     # ── schema ──────────────────────────────────────────────────────────
@@ -151,13 +153,17 @@ class Ledger:
         r = self.db.execute("SELECT * FROM approvals WHERE id=?", (aid,)).fetchone()
         return dict(r) if r else None
 
-    def approvals(self, status: str = "pending") -> list[dict]:
-        return [dict(r) for r in self.db.execute("SELECT * FROM approvals WHERE status=? ORDER BY id", (status,))]
+    def approvals(self, status: str = "pending", limit: int = 200) -> list[dict]:
+        order = "ORDER BY id" if status == "pending" else "ORDER BY decided_ts DESC"
+        return [dict(r) for r in self.db.execute(f"SELECT * FROM approvals WHERE status=? {order} LIMIT ?", (status, limit))]
 
-    def decide(self, aid: int, status: str):
+    def decide(self, aid: int, status: str, by: Optional[str] = None):
         with _lock:
-            self.db.execute("UPDATE approvals SET status=?, decided_ts=? WHERE id=?", (status, _utc(), aid))
+            self.db.execute("UPDATE approvals SET status=?, decided_ts=?, decided_by=? WHERE id=?", (status, _utc(), by, aid))
             self.db.commit()
+        a = self.approval(aid)
+        if a:
+            self.emit(a["bay"], "decision", f"{'ACCEPTED' if status=='approved' else 'REJECTED'} by {by or 'bridge'} · {a['summary']}", agent=by, approval=aid, decision=status)
 
     # ── artifacts (designs, listings, deliverables) ─────────────────────
     def save_artifact(self, bay: str, kind: str, title: str, payload: dict, run_id: Optional[str] = None) -> int:

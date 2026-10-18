@@ -93,10 +93,10 @@ class Mother:
         if gate == "approve_spend":
             spent = self.spent_today()
             if spent + est_cost <= config.DAILY_SPEND_CAP:
-                self.L.decide(aid, "approved"); self.say(f"Approved #{aid} · spend ${spent + est_cost:.2f} of ${config.DAILY_SPEND_CAP:.2f} today · {summary}", approval=aid, decision="approved"); return True
+                self.L.decide(aid, "approved", self.name); self.say(f"Approved #{aid} · spend ${spent + est_cost:.2f} of ${config.DAILY_SPEND_CAP:.2f} today · {summary}", approval=aid, decision="approved"); return True
             self.say(f"Declined #{aid} · daily cap reached (${spent:.2f}) · escalating to {config.CREATOR}", approval=aid, decision="held"); return False
         if gate == "approve_publish":
-            self.L.decide(aid, "approved"); self.say(f"Approved #{aid} · doctrine checks passed · {summary}", approval=aid, decision="approved"); return True
+            self.L.decide(aid, "approved", self.name); self.say(f"Approved #{aid} · doctrine checks passed · {summary}", approval=aid, decision="approved"); return True
         return False
 
     # ── sweeps ─────────────────────────────────────────────────────────

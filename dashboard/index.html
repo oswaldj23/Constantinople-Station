@@ -229,6 +229,11 @@ code{font-family:var(--mono);color:var(--ph-bright);background:rgba(61,255,115,.
 .ccard .creed{margin-top:8px;font-size:10.5px;color:var(--ph-text);line-height:1.5;max-width:60ch}
 .sim{font-size:8px;letter-spacing:.14em;color:var(--amber);border:1px solid var(--amber);padding:0 4px;margin-left:6px;vertical-align:middle;text-transform:uppercase}
 .sim:empty{display:none}
+#feed .ev.k-decision{border-color:var(--gold)} #feed .ev.k-decision b{color:var(--gold)}
+.log .l.k-decision{color:var(--gold)} .arch .a.k-decision .k{background:var(--gold)}
+.decgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px;margin:8px 0}
+.decgrid img{width:100%;aspect-ratio:1;object-fit:contain;background:#fff;border:1px solid var(--ph-faint)}
+.decgrid img.mock{object-fit:cover;background:#0b0f14}
 #feed .ev.k-mission{border-color:var(--ph-bright);background:rgba(61,255,115,.12)} #feed .ev.k-mission b{color:var(--ph-bright)}
 .log .l.k-mission{color:var(--ph-bright)} .arch .a.k-mission .k{background:var(--ph-bright)}
 
@@ -750,6 +755,21 @@ function drawCrewSprite(gx,x,y,color,frame,face,carry,walking){
   R(x-3.5-(face>0?0:-6.5),y-8,1,4,'#8a94a3');
   if(carry){ R(x-2.5,y-16,6,3,carry); R(x-2.5,y-16,6,0.5,'rgba(255,255,255,.35)'); }
 }
+function drawMotherSprite(gx,x,y,t,face){
+  x=Math.round(x*2)/2; const bob=Math.sin((t||0)*2)*1; y=Math.round((y-bob)*2)/2; const R=(a,b,c,d,col)=>{ gx.fillStyle=col; gx.fillRect(a,b,c,d); };
+  if(gx===g){ lightR(x+0.5,y-9,16,'#ffffff',0.16); lightR(x+0.5,y-9,7,'#9cffb8',0.18); }
+  // ground glow instead of feet (she floats)
+  R(x-4,y-0.5,9,1,'rgba(156,255,184,.35)');
+  // robe (tapered)
+  R(x-1.5,y-4,4,3,'#dfe6ea'); R(x-3,y-10,7,6,'#eef2f5'); R(x-3.5,y-11,8,1.5,'#ffffff'); R(x-3,y-4,7,0.5,'#b7c2cc');
+  R(x-1+(face>0?2.5:-1.5),y-9,1.5,4,'#3dff73'); // sash in station green
+  // hood + face
+  R(x-3,y-16,7,5.5,'#eef2f5'); R(x-3.5,y-16.5,8,1,'#ffffff'); R(x-2,y-15,5,3.5,'#0b1d12'); R(x-1+(face>0?0.5:-0.5),y-14.5,3,1,'#9cffb8'); R(x-0.5+(face>0?0.5:-0.5),y-14.5,1,1,'#ffffff');
+  // halo
+  R(x-3,y-19.5,7,0.5,'#ffd24d'); R(x-3.5,y-19,0.5,1,'#ffd24d'); R(x+3.5,y-19,0.5,1,'#ffd24d'); R(x-2,y-20,5,0.5,'rgba(255,210,77,.6)');
+  // drifting motes
+  if(gx===g){ for(let i=0;i<3;i++){ const a=(t||0)*1.3+i*2.1; R(x+Math.cos(a)*6, y-9+Math.sin(a*1.3)*6, 0.5,0.5,'rgba(255,255,255,.8)'); } }
+}
 const bubbles=[]; // {cr,text,until}
 function sayBubble(bayId,text){ if(!text) return; const cands=crew.filter(c=>c.bay===bayId); if(!cands.length) return; const cr=cands[Math.floor(Math.random()*cands.length)]; const now=performance.now()/1000; for(let i=bubbles.length-1;i>=0;i--){ if(bubbles[i].cr.bay===bayId) bubbles.splice(i,1); } bubbles.push({cr,text:String(text).slice(0,46),until:now+3.8}); }
 const packets=[]; // {pts, i, t, color}
@@ -770,7 +790,7 @@ function frame(now){
   drawFloaters(t); drawCorridors(t);
   for(const b of BAYS) drawBay(b,t);
   drawPackets();
-  const sorted=[...crew].sort((a,b)=>a.y-b.y); for(const cr of sorted) drawCrewSprite(g,cr.x,cr.y,cr.color,cr.frame,cr.face,cr.carry,!!cr.path);
+  const sorted=[...crew].sort((a,b)=>a.y-b.y); for(const cr of sorted){ if(cr.a.lead) drawMotherSprite(g,cr.x,cr.y,t,cr.face); else drawCrewSprite(g,cr.x,cr.y,cr.color,cr.frame,cr.face,cr.carry,!!cr.path); }
   // composite
   ctx.setTransform(dpr,0,0,dpr,0,0);
   drawStars(t);
@@ -794,7 +814,8 @@ function drawLabels(t){
   const nowS=performance.now()/1000; for(let i=bubbles.length-1;i>=0;i--){ if(bubbles[i].until<nowS) bubbles.splice(i,1); }
   if(z>1.1){ ctx.font=`${Math.max(10,Math.round(4.6*z))}px "IBM Plex Mono", monospace`; for(const bb of bubbles){ const [sx,sy]=w2s(bb.cr.x,bb.cr.y-18); const tw=ctx.measureText(bb.text).width; const bw=tw+12, bh=Math.max(14,Math.round(6*z)); const bx=clamp(sx-bw/2,4,cw-bw-4), by=sy-bh; ctx.fillStyle='rgba(3,12,6,.92)'; ctx.fillRect(bx,by,bw,bh); ctx.strokeStyle='rgba(61,255,115,.55)'; ctx.lineWidth=1; ctx.strokeRect(bx+0.5,by+0.5,bw-1,bh-1); ctx.fillStyle='rgba(3,12,6,.92)'; ctx.beginPath(); ctx.moveTo(sx-4,by+bh); ctx.lineTo(sx+4,by+bh); ctx.lineTo(sx,by+bh+5); ctx.fill(); ctx.fillStyle='#9cffb8'; ctx.fillText(bb.text,bx+6,by+bh-Math.round(bh*0.3)); } }
   // crew name on hover-ish (selected bay only)
-  if(S.selected && z>2){ ctx.font=`${Math.max(10,fs-5)}px "IBM Plex Mono", monospace`; for(const cr of crew){ if(cr.a.bay!==S.selected && cr.bay!==S.selected) continue; const [sx,sy]=w2s(cr.x,cr.y-14); ctx.fillStyle='rgba(3,10,6,.8)'; const w=ctx.measureText(cr.a.name).width; ctx.fillRect(sx-w/2-3,sy-10,w+6,12); ctx.fillStyle=cr.color; ctx.fillText(cr.a.name,sx-w/2,sy); } }
+  if(z>1.6){ const m=crew.find(c=>c.a.lead); if(m){ const [sx,sy]=w2s(m.x,m.y-24); ctx.font=`${Math.max(10,fs-4)}px VT323, monospace`; const w=ctx.measureText('MOTHER').width; ctx.fillStyle='rgba(3,10,6,.8)'; ctx.fillRect(sx-w/2-3,sy-11,w+6,13); ctx.fillStyle='#fff'; ctx.fillText('MOTHER',sx-w/2,sy); } }
+  if(S.selected && z>2){ ctx.font=`${Math.max(10,fs-5)}px "IBM Plex Mono", monospace`; for(const cr of crew){ if(cr.a.lead) continue; if(cr.a.bay!==S.selected && cr.bay!==S.selected) continue; const [sx,sy]=w2s(cr.x,cr.y-14); ctx.fillStyle='rgba(3,10,6,.8)'; const w=ctx.measureText(cr.a.name).width; ctx.fillRect(sx-w/2-3,sy-10,w+6,12); ctx.fillStyle=cr.color; ctx.fillText(cr.a.name,sx-w/2,sy); } }
 }
 
 // ───────────────────────────── simulation ─────────────────────────────
@@ -892,7 +913,7 @@ function renderPanel(){
     </div>`;
   $('#pClose').onclick=closePanel;
   renderPanelLive(); renderPanelOut(); renderPanelLog();
-  const pc=$('#pCrew'); pc.innerHTML=''; for(const a of AGENTS.filter(a=>a.bay===b.id)){ const d=document.createElement('div'); d.className='crewline'; const c=document.createElement('canvas'); c.width=12; c.height=16; drawCrewSprite(c.getContext('2d'),6,15,b.color,0,1,null,false); d.appendChild(c); d.insertAdjacentHTML('beforeend',`<div><div class="n">${a.name}</div><div class="r">${a.role} · ${a.model}</div></div><div class="s">${st.status==='standby'?'standby':a.tasks+' tasks'}</div>`); pc.appendChild(d); }
+  const pc=$('#pCrew'); pc.innerHTML=''; for(const a of AGENTS.filter(a=>a.bay===b.id)){ const d=document.createElement('div'); d.className='crewline'; const c=document.createElement('canvas'); if(a.lead){ c.width=14; c.height=24; drawMotherSprite(c.getContext('2d'),7,23,0,1); } else { c.width=12; c.height=16; drawCrewSprite(c.getContext('2d'),6,15,b.color,0,1,null,false); } d.appendChild(c); d.insertAdjacentHTML('beforeend',`<div><div class="n">${a.name}</div><div class="r">${a.role} · ${a.model}</div></div><div class="s">${st.status==='standby'?'standby':a.tasks+' tasks'}</div>`); pc.appendChild(d); }
 }
 function renderPanelLive(){
   const b=BY[S.selected]; if(!b) return; const st=S.bays[b.id]; const dormant=st.status==='standby';
@@ -960,7 +981,7 @@ function renderPanelLog(){ const el=$('#pLog'); if(!el||!S.selected) return;
 document.querySelectorAll('#dock .tab').forEach(tb=>tb.onclick=()=>showView(tb.dataset.view));
 function showView(v){ S.view=v; document.querySelectorAll('#dock .tab').forEach(t=>t.classList.toggle('on',t.dataset.view===v)); const views=$('#views'); views.classList.toggle('open',v!=='map'); document.querySelectorAll('.view').forEach(x=>x.classList.toggle('on',x.id==='view-'+v)); if(v!=='map') closePanel(); beep(520);
   if(v==='mission'){ renderMission(); } else stopMissionAnim();
-  if(v==='archive'){ S.unseenIncidents=0; $('#incBadge').textContent=''; renderArchive(); } if(v==='ledger'){ fetchListings().then(renderLedger); renderLedger(); } if(v==='crew') renderCrew(); if(v==='settings') renderSettings(); }
+  if(v==='archive'){ S.unseenIncidents=0; $('#incBadge').textContent=''; fetchDecisions(); renderArchive(); } if(v==='ledger'){ fetchListings().then(renderLedger); renderLedger(); } if(v==='crew') renderCrew(); if(v==='settings') renderSettings(); }
 
 // mission board
 let misRaf=null;
@@ -1001,7 +1022,7 @@ function drawJourney(){
 $('#hMission').onclick=()=>showView('mission'); $('#hMission').onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); showView('mission'); } };
 
 // archive
-const CHIPS=['ALL','MOTHER','MISSION','SALE','STEP','TREND','MESSAGE','PUBLISH','INCIDENT','STATUS','CODEX'];
+const CHIPS=['ALL','ACCEPTED','REJECTED','MOTHER','MISSION','SALE','STEP','TREND','MESSAGE','PUBLISH','INCIDENT','STATUS','CODEX'];
 const CODEX=[
   {title:'Prime mission', body:`The station has one destination: one trillion United States dollars, banked and written. Every bay, every agent and every sol exists to move the hull toward it.\n\n• The route is ten waypoints, each ten times the last: First Light ($1K), Ember Reach ($10K), Meridian Gate ($100K), Sable Crossing ($1M), Bosphorus Deep ($10M), The Verge ($100M), Aurum Belt ($1B), Cold Harbor ($10B), Last Lantern ($100B), Trillion Dawn ($1T).\n• No bay competes with another. A bay that cannot show how its next run moves the hull stands down and asks Research for a better one.\n• Velocity is revenue per sol. The Core publishes it, the required velocity, and the doublings remaining, every sol, so nobody on board mistakes motion for progress.\n• The mission is won by compounding, not by sprinting: new bays, better margins, more hulls. The doctrine below is how the station survives long enough to get there.`, tags:['mission','origin','live']},
   {title:'Boot doctrine', body:`Mother wakes the station with one instruction: keep the lights on, keep the books true.\n\n• Every room is self-contained. Every door is numbered. Nothing is deleted, only superseded.\n• All rooms answer to the bridge command structure.\n• All findings route through the research routing rule.\n• All spend is mirrored to the Treasury mirror ledger.`, tags:['origin','system','live']},
@@ -1013,21 +1034,24 @@ const CODEX=[
 ];
 function renderArchive(){
   const chips=$('#archChips'); if(!chips.children.length){ CHIPS.forEach(c=>{ const b=document.createElement('button'); b.className='chip'+(c===S.filter?' on':''); b.dataset.c=c; b.onclick=()=>{S.filter=c; renderArchive();}; chips.appendChild(b); }); }
-  const counts={}; S.archive.forEach(e=>{ const k=e.kind==='reply'?'MESSAGE':(e.kind==='complete'?'STEP':e.kind.toUpperCase()); counts[k]=(counts[k]||0)+1; }); counts.CODEX=CODEX.length; counts.ALL=S.archive.length+CODEX.length;
+  const counts={}; S.archive.forEach(e=>{ const k=e.kind==='reply'?'MESSAGE':(e.kind==='complete'?'STEP':e.kind.toUpperCase()); counts[k]=(counts[k]||0)+1; }); counts.CODEX=CODEX.length; counts.ALL=S.archive.length+CODEX.length; const dec=S.decisions||{approved:[],rejected:[]}; counts.ACCEPTED=dec.approved.length; counts.REJECTED=dec.rejected.length;
   chips.querySelectorAll('.chip').forEach(ch=>{ ch.classList.toggle('on',ch.dataset.c===S.filter); ch.innerHTML=`${ch.dataset.c}<span class="c">${counts[ch.dataset.c]||0}</span>`; });
   $('#archCount').textContent=S.archive.length+CODEX.length;
   const q=S.search.toLowerCase();
   let rows=[];
   if(S.filter==='ALL'||S.filter==='CODEX') rows=rows.concat(CODEX.map((c,i)=>({codex:true,i,ts:new Date(S.startedAt).toISOString(),kind:'codex',msg:c.title})));
-  if(S.filter!=='CODEX') rows=rows.concat(S.archive.filter(e=>{ const k=e.kind==='reply'?'MESSAGE':(e.kind==='complete'?'STEP':e.kind.toUpperCase()); return S.filter==='ALL'||k===S.filter; }));
+  if(S.filter==='ACCEPTED'||S.filter==='REJECTED'){ const list=(S.decisions||{approved:[],rejected:[]})[S.filter==='ACCEPTED'?'approved':'rejected']; rows=list.map(a=>({decision:true, id:'d'+a.id, a, ts:a.decided_ts||a.ts, kind:'decision', bay:a.bay, msg:`${a.concept||a.summary}`})); if(!rows.length && S.mode!=='live') rows=[]; }
+  else if(S.filter!=='CODEX') rows=rows.concat(S.archive.filter(e=>{ const k=e.kind==='reply'?'MESSAGE':(e.kind==='complete'?'STEP':e.kind.toUpperCase()); return S.filter==='ALL'||k===S.filter; }));
   if(q) rows=rows.filter(r=>(r.msg+' '+(r.bay||'')+' '+(r.agent||'')).toLowerCase().includes(q));
   rows=rows.slice(0,254);
-  const list=$('#archList'); list.innerHTML=rows.map(r=>`<button class="a k-${r.kind} ${S.archSel===(r.codex?'c'+r.i:r.id)?'sel':''}" data-id="${r.codex?'c'+r.i:r.id}"><span class="t">${r.codex?'CODEX':hhmm(new Date(r.ts))}</span><span class="k"></span><span class="m">${r.codex?'':`<b style="color:${BY[r.bay]?BY[r.bay].color:'inherit'}">${BY[r.bay]?BY[r.bay].name.split(' ')[0]:'STATION'}</b> · `}${esc(r.msg)}</span></button>`).join('') || '<div class="note dim" style="padding:12px">Nothing matches.</div>';
+  const list=$('#archList'); if(!rows.length && (S.filter==='ACCEPTED'||S.filter==='REJECTED')){ list.innerHTML=`<div class="note dim" style="padding:12px">${S.mode==='live'?'No '+S.filter.toLowerCase()+' ideas yet.':'Decisions are recorded by the engine. Connect your ship to see what you and Mother accepted or rejected.'}</div>`; renderArchDetail(); return; }
+  list.innerHTML=rows.map(r=>`<button class="a k-${r.kind} ${S.archSel===(r.codex?'c'+r.i:r.id)?'sel':''}" data-id="${r.codex?'c'+r.i:r.id}"><span class="t">${r.codex?'CODEX':hhmm(new Date(r.ts))}</span><span class="k"></span><span class="m">${r.codex?'':`<b style="color:${BY[r.bay]?BY[r.bay].color:'inherit'}">${BY[r.bay]?BY[r.bay].name.split(' ')[0]:'STATION'}</b> · `}${esc(r.msg)}</span></button>`).join('') || '<div class="note dim" style="padding:12px">Nothing matches.</div>';
   list.querySelectorAll('.a').forEach(a=>a.onclick=()=>{ S.archSel=a.dataset.id; renderArchive(); });
   renderArchDetail();
 }
 function renderArchDetail(){ const el=$('#archDetail'); const sel=S.archSel; if(sel==null){ const c=CODEX[0]; el.innerHTML=codexHTML(c); return; }
   if(String(sel).startsWith('c')){ el.innerHTML=codexHTML(CODEX[+sel.slice(1)]); return; }
+  if(String(sel).startsWith('d')){ const dec=S.decisions||{approved:[],rejected:[]}; const a=[...dec.approved,...dec.rejected].find(x=>'d'+x.id===sel); if(!a){ el.innerHTML=''; return; } const base=(S.srcUrl||'').replace(/\/events\/?$/,''); const ok=a.status==='approved'; el.innerHTML=`<div class="eyebrow">${ok?'Accepted':'Rejected'} · ${a.decided_by||'bridge'} · ${a.decided_ts?new Date(a.decided_ts).toLocaleString():''}</div><h3>${esc(a.concept||a.summary)}</h3><div class="tags"><span class="chip on" style="${ok?'':'color:var(--red);border-color:var(--red)'}">${ok?'accepted':'rejected'}</span><span class="chip">${a.bay}</span><span class="chip">${a.gate}</span><span class="chip">#${a.id}</span></div><p class="note">${esc(a.summary)}</p>${(a.images&&a.images.length)||(a.mockups&&a.mockups.length)?`<div class="decgrid">${(a.images||[]).map(u=>`<a href="${base}${u}" target="_blank" rel="noopener"><img src="${base}${u}" alt="design"></a>`).join('')}${(a.mockups||[]).slice(0,4).map(u=>`<a href="${u}" target="_blank" rel="noopener"><img class="mock" src="${u}" alt="mockup"></a>`).join('')}</div>`:''}<div class="eyebrow">Who decided</div><p class="note dim">${a.decided_by===S.ident.sign||a.decided_by==='MOTHER'?'Mother, on her own authority within the daily cap.':(a.decided_by||'the bridge')+', the Creator.'}</p>`; return; }
   const e=S.archive.find(x=>x.id==sel); if(!e){ el.innerHTML=''; return; } const b=BY[e.bay];
   el.innerHTML=`<div class="eyebrow">${new Date(e.ts).toLocaleString()} · ${e.kind} · ${b?b.name:'STATION'}</div><h3>${esc(e.msg)}</h3><div class="tags"><span class="chip on">${e.kind}</span>${e.agent?`<span class="chip">${e.agent}</span>`:''}${e.amount!=null?`<span class="chip">${money(e.amount)}</span>`:''}${e.step?`<span class="chip">step ${pad(e.step)}</span>`:''}</div><div class="eyebrow">Raw event</div><pre>${esc(JSON.stringify({ts:e.ts,bay:e.bay,kind:e.kind,step:e.step,agent:e.agent,msg:e.msg,amount:e.amount},null,2))}</pre><div class="eyebrow">Linked references</div><p class="note dim">${linked(e)}</p>`;
 }
@@ -1048,7 +1072,7 @@ function renderLedger(){
 // crew
 function renderCrew(){ const el=$('#crewGrid'); $('#crewMeta').textContent=`MOTHER + ${AGENTS.length-1} crew · ${AGENTS.filter(a=>S.bays[a.bay].status!=='standby').length} active · reporting to ${(S.mission.integrations&&S.mission.integrations.creator)||'the Creator'}`; el.innerHTML='';
   for(const a of AGENTS){ const b=BY[a.bay]; const st=S.bays[a.bay]; const d=document.createElement('div'); d.className='ccard'; d.style.setProperty('--bay',b.color); const c=document.createElement('canvas'); c.width=12; c.height=16; drawCrewSprite(c.getContext('2d'),6,15,b.color,0,1,null,false); d.appendChild(c);
-    if(a.lead){ d.classList.add('lead'); c.getContext('2d').clearRect(0,0,12,16); drawCrewSprite(c.getContext('2d'),6,15,'#ffffff',0,1,null,false); const decisions=S.archive.filter(e=>e.kind==='mother').length; d.insertAdjacentHTML('beforeend',`<div style="min-width:0"><div class="n">${a.name}<span class="tag">lead · overseer</span></div><div class="r">${a.role}</div><div class="creed">Keeps the mission on track. Reads every incident and fixes what she can on her own authority: retries, holds, fresh briefs, waking bays. Approves routine spend inside the daily cap. Escalates to the Creator only what she is not allowed to decide. Every decision is written with her name on it.</div><dl><dt>Reports to</dt><dd>${(S.mission.integrations&&S.mission.integrations.creator)||'the Creator'}</dd><dt>Model</dt><dd>${a.model}</dd><dt>Decisions</dt><dd>${decisions} this session</dd><dt>Autonomy</dt><dd>${S.mission.integrations?String(S.mission.integrations.autonomy||'assist').toUpperCase()+' · cap '+money(S.mission.integrations.daily_cap||10)+'/day':'demo'}</dd></dl></div>`); el.appendChild(d); continue; }
+    if(a.lead){ d.classList.add('lead'); c.width=14; c.height=24; c.getContext('2d').clearRect(0,0,14,24); drawMotherSprite(c.getContext('2d'),7,23,0,1); const decisions=S.archive.filter(e=>e.kind==='mother').length; d.insertAdjacentHTML('beforeend',`<div style="min-width:0"><div class="n">${a.name}<span class="tag">lead · overseer</span></div><div class="r">${a.role}</div><div class="creed">Keeps the mission on track. Reads every incident and fixes what she can on her own authority: retries, holds, fresh briefs, waking bays. Approves routine spend inside the daily cap. Escalates to the Creator only what she is not allowed to decide. Every decision is written with her name on it.</div><dl><dt>Reports to</dt><dd>${(S.mission.integrations&&S.mission.integrations.creator)||'the Creator'}</dd><dt>Model</dt><dd>${a.model}</dd><dt>Decisions</dt><dd>${decisions} this session</dd><dt>Autonomy</dt><dd>${S.mission.integrations?String(S.mission.integrations.autonomy||'assist').toUpperCase()+' · cap '+money(S.mission.integrations.daily_cap||10)+'/day':'demo'}</dd></dl></div>`); el.appendChild(d); continue; }
     d.insertAdjacentHTML('beforeend',`<div style="min-width:0"><div class="n">${a.name}</div><div class="r">${a.role}</div><dl><dt>Bay</dt><dd>${b.name}</dd><dt>Reports to</dt><dd>MOTHER</dd><dt>Model</dt><dd>${a.model}</dd><dt>Status</dt><dd>${st.status==='standby'?'standby':(st.status==='hold'?'held':'working')}</dd><dt>Tasks</dt><dd>${a.tasks+ (b.rev? Math.floor(b.rev/60):Math.floor(st.cost*12))} this mission</dd></dl></div>`); el.appendChild(d); } }
 // settings
 function applyIdent(){ $('#stationName').textContent=S.ident.name; document.title=S.ident.name.replace(/\b\w+/g,w=>w[0]+w.slice(1).toLowerCase()); }
@@ -1057,6 +1081,7 @@ function renderSetup(){ const I=S.mission.integrations; const items=[['Engine', 
 let apprTimer=null;
 async function fetchApprovals(){ if(S.mode!=='live'||!S.srcUrl) return; const base=S.srcUrl.replace(/\/events\/?$/,''); try{ const r=await fetch(`${base}/approvals`); if(!r.ok) return; const rows=await r.json(); S.approvals=rows; const n=rows.length; const b=$('#apprBadge'); b.textContent=n||''; b.className='badge amber'; renderApprovals(); }catch(e){} }
 function renderApprovals(){ const wrap=$('#apprWrap'); const rows=S.approvals||[]; wrap.hidden=!(S.mode==='live'&&rows.length); if(wrap.hidden) return; const base0=S.srcUrl.replace(/\/events\/?$/,''); $('#apprList').innerHTML=rows.map(a=>`<div class="a"><div class="t"><b>#${a.id}</b>${esc(a.summary)}<div class="note dim" style="margin-top:2px">${a.bay} · ${a.gate} · ${new Date(a.ts).toLocaleTimeString()}</div></div><div class="btns"><button class="btn ok" data-id="${a.id}" data-d="approve">Approve</button><button class="btn no" data-id="${a.id}" data-d="reject">Reject</button></div>${(a.images&&a.images.length)||(a.mockups&&a.mockups.length)?`<div class="pics">${(a.images||[]).map(u=>`<a href="${base0}${u}" target="_blank" rel="noopener"><img src="${base0}${u}" alt="design" title="${u.includes('_dark')?'dark shirt version':'light shirt version'}"></a>`).join('')}${(a.mockups||[]).slice(0,3).map(u=>`<a href="${u}" target="_blank" rel="noopener"><img class="mock" src="${u}" alt="mockup"></a>`).join('')}</div>`:''}</div>`).join(''); $('#apprList').querySelectorAll('button').forEach(b=>b.onclick=async()=>{ const base=S.srcUrl.replace(/\/events\/?$/,''); b.disabled=true; try{ await fetch(`${base}/approvals/${b.dataset.id}/${b.dataset.d}`,{method:'POST'}); beep(b.dataset.d==='approve'?880:330); }catch(e){} fetchApprovals(); }); }
+async function fetchDecisions(){ if(S.mode!=='live'||!S.srcUrl) return; const base=S.srcUrl.replace(/\/events\/?$/,''); try{ const [a,r]=await Promise.all([fetch(`${base}/approvals?status=approved`),fetch(`${base}/approvals?status=rejected`)]); if(a.ok&&r.ok){ S.decisions={approved:await a.json(),rejected:await r.json()}; if(S.view==='archive') renderArchive(); } }catch(e){} }
 async function fetchListings(){ if(S.mode!=='live'||!S.srcUrl) return; const base=S.srcUrl.replace(/\/events\/?$/,''); try{ const r=await fetch(`${base}/listings`); if(r.ok){ S.listings=await r.json(); } }catch(e){} }
 function renderSettings(){ fetchApprovals(); renderApprovals(); $('#stName').value=S.ident.name; $('#stSign').value=S.ident.sign; renderSetup(); $('#srcUrl').value=store.get('src','')||$('#srcUrl').getAttribute('value')||''; $('#sndBtn').textContent='Sound: '+(S.sound?'on':'off'); $('#aboutBays').textContent=BAYS.map(b=>b.name.toLowerCase()).join(' · '); }
 $('#stSave').onclick=()=>{ const n=$('#stName').value.trim().toUpperCase()||'CONSTANTINOPLE STATION', g=$('#stSign').value.trim().toUpperCase()||n.split(' ')[0]; S.ident={name:n,sign:g}; store.set('ident',S.ident); applyIdent(); event({bay:'core',kind:'status',agent:g,msg:`Station registered as ${n} · call sign ${g}`}); beep(880); };
@@ -1076,6 +1101,7 @@ function applyRemote(e){
   if(e.kind==='snapshot'){ if(e.bays) for(const [id,v] of Object.entries(e.bays)){ if(S.bays[id]) Object.assign(S.bays[id],v); } if(e.totals) Object.assign(S.totals,e.totals); if(e.mission){ if(e.mission.velocity_per_day!=null) S.mission.velocity=e.mission.velocity_per_day; if(e.mission.directive) S.mission.directive=e.mission.directive; if(e.mission.started_at) S.startedAt=Date.parse(e.mission.started_at)||S.startedAt; S.mission.li=missionState().li; } if(e.integrations) S.mission.integrations=e.integrations; if(e.station){ S.ident={name:String(e.station).toUpperCase(), sign:String(e.callsign||e.station.split(' ')[0]).toUpperCase()}; applyIdent(); } renderHUD(); if(S.selected) renderPanelLive(); if(S.view==='settings') renderSetup(); if(S.view==='mission') renderMission(); return; }
   if(e.kind==='mother' && S.selected==='core') setTimeout(renderPanelLog,0);
   if(e.approval!=null || (e.kind==='status' && /pproval/.test(e.msg))) setTimeout(fetchApprovals,800);
+  if(e.kind==='decision') setTimeout(fetchDecisions,800);
   if(e.kind==='mission'){ if(e.directive) S.mission.directive=e.directive; if(e.velocity_per_day!=null) S.mission.velocity=e.velocity_per_day; if(S.view==='mission') renderMission(); }
   const st=S.bays[e.bay]; if(!st) return;
   if(e.kind==='step'){ st.step=(e.step||1)%BY[e.bay].steps.length; st.prog=0; if(e.amount) addCost(e.bay,e.amount); sendPacket(e.bay,'core',BY[e.bay].color); }

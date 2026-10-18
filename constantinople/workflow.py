@@ -139,8 +139,8 @@ class Runner:
             except asyncio.TimeoutError:
                 pass
 
-    def decide(self, aid: int, status: str):
-        self.ledger.decide(aid, status)
+    def decide(self, aid: int, status: str, by: str | None = None):
+        self.ledger.decide(aid, status, by or config.CREATOR)
         if aid in self.waits: self.waits[aid].set()
 
     # event-triggered runs (orders, messages, sales) go through a queue the orchestrator drains
