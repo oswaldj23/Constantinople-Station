@@ -20,14 +20,28 @@ def _ffmpeg(*args, timeout=600):
         raise RuntimeError(r.stderr[-400:])
 
 
+INSTALL_HINT = "ffmpeg is not installed on this machine · run: sudo apt-get install -y ffmpeg fonts-dejavu-core · then: sudo systemctl restart constantinople"
+
+
+def _have_ffmpeg() -> bool:
+    return shutil.which("ffmpeg") is not None
+
+
 def _ffprobe_duration(path) -> float:
-    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)], capture_output=True, text=True)
-    try: return float(r.stdout.strip())
-    except Exception: return 0.0
+    if shutil.which("ffprobe"):
+        r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)], capture_output=True, text=True)
+        try: return float(r.stdout.strip())
+        except Exception: pass
+    # fall back to ffmpeg's own banner ("Duration: 00:00:25.10, ...")
+    import re
+    r = subprocess.run(["ffmpeg", "-i", str(path)], capture_output=True, text=True)
+    m = re.search(r"Duration: (\d+):(\d+):(\d+\.\d+)", r.stderr or "")
+    return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3)) if m else 0.0
 
 
 # ── 1. voiceover ─────────────────────────────────────────────────────────
 async def voiceover(ctx, *, script_from: str = "script", voice: str = None, dry_run: bool = True, **_):
+    if not _have_ffmpeg(): return {"summary": "ffmpeg missing", "incident": INSTALL_HINT, "cost": 0.0}
     sc = ctx.get(script_from) or {}
     text = sc.get("voiceover") or " ".join(b.get("line", "") for b in sc.get("beats", []))
     d = OUT / ctx["run_id"]; d.mkdir(parents=True, exist_ok=True); mp3 = d / "voice.mp3"
@@ -52,7 +66,7 @@ async def voiceover(ctx, *, script_from: str = "script", voice: str = None, dry_
                                  data={"model": "whisper-1", "response_format": "verbose_json", "timestamp_granularities[]": "word"}, files={"file": ("voice.mp3", fh, "audio/mpeg")})
             if t.status_code == 200: words = [{"w": w["word"], "s": w["start"], "e": w["end"]} for w in t.json().get("words", [])]
         except Exception: pass
-    dur = _ffprobe_duration(mp3)
+    dur = _ffprobe_duration(mp3) or (words[-1]["e"] + 0.4 if words else max(8, len(text.split()) / 2.6))
     return {"file": str(mp3), "duration": dur, "words": words, "cost": round(len(text) / 1e6 * 15 + 0.006 * dur / 60, 4), "summary": f"voiceover {dur:.0f}s · {len(words or [])} word timings"}
 
 
@@ -184,6 +198,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 # ── 4. render ────────────────────────────────────────────────────────────
 async def render(ctx, *, dry_run: bool = True, **_):
+    if not _have_ffmpeg(): return {"summary": "ffmpeg missing", "incident": INSTALL_HINT, "cost": 0.0}
     vo = ctx.get("voiceover") or {}; sc = ctx.get("scenes") or {}; script = ctx.get("script") or {}
     d = OUT / ctx["run_id"]; d.mkdir(parents=True, exist_ok=True); out = d / "short.mp4"
     frames = sc.get("frames") or []; dur = float(vo.get("duration") or 15)

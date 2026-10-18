@@ -5,7 +5,10 @@ set -e
 cd /opt/constantinople
 git pull -q
 .venv/bin/pip install -q -r requirements.txt
-command -v ffmpeg >/dev/null || (apt-get update -qq && apt-get install -y -qq ffmpeg fonts-dejavu-core >/dev/null)
+if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+  echo "installing ffmpeg (one time, ~1 min)…"; apt-get update -qq; apt-get install -y -qq ffmpeg fonts-dejavu-core >/dev/null || sudo apt-get install -y -qq ffmpeg fonts-dejavu-core >/dev/null
+fi
+command -v ffprobe >/dev/null && echo "ffmpeg: ok" || echo "ffmpeg: MISSING — run: sudo apt-get install -y ffmpeg"
 # carry new keys from .env.example into .env with their defaults; never touch keys you already have
 added=0
 while IFS= read -r line; do
