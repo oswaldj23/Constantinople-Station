@@ -79,6 +79,10 @@ class Runner:
             if result.get("incident"):
                 L.emit(bay.id, "incident", result["incident"], step=i + 1, agent=agent, run_id=run_id)
                 raise Incident(result["incident"])
+            if st.get("verdict_from") and str(result.get(st["verdict_from"], "")).lower() == "reject":
+                L.emit(bay.id, "mother", f"Rejected before publish · {result.get('reason','no reason given')}", step=i + 1, agent=config.MOTHER_NAME, run_id=run_id, action="reject_listing")
+                L.emit(bay.id, "incident", f"Design discarded by {config.MOTHER_NAME} · {result.get('reason','')}", step=i + 1, agent=config.MOTHER_NAME, run_id=run_id)
+                raise Rejected()
             ctx[st["id"]] = result
             if st.get("share"):
                 self.shared[st["share"]] = result

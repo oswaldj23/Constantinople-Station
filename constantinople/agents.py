@@ -37,8 +37,21 @@ def _fill(template: str, ctx: dict) -> str:
 
 
 def cost_usd(tokens_in: int, tokens_out: int, model: str = "default") -> float:
-    p = config.PRICES.get(model, config.PRICES["default"])
+    p = next((v for k, v in config.PRICES.items() if k != "default" and k in model), config.PRICES["default"])
     return tokens_in / 1e6 * p["in"] + tokens_out / 1e6 * p["out"]
+
+
+def _create(client, model, system, prompt, max_tokens=1500):
+    """Call the model; if the name is not accepted, walk the fallback list once."""
+    import anthropic
+    tried = [model] + [m for m in config.MODEL_FALLBACKS if m != model]
+    last = None
+    for m in tried:
+        try:
+            return client.messages.create(model=m, max_tokens=max_tokens, system=system, messages=[{"role": "user", "content": prompt}]), m
+        except anthropic.NotFoundError as e:
+            last = e; continue
+    raise last
 
 
 async def run_agent(agent: str, prompt_file: str, ctx: dict, *, dry_run: bool) -> tuple[dict, float, str]:
@@ -56,17 +69,15 @@ async def run_agent(agent: str, prompt_file: str, ctx: dict, *, dry_run: bool) -
         result = canned(prompt_file, ctx)
         return result, round(random.uniform(0.004, 0.03), 4), result.get("summary", f"{agent} finished")
     client = _anthropic()
-    msg = client.messages.create(
-        model=config.AGENT_MODEL, max_tokens=1500,
-        system=_fill(DOCTRINE, ctx) + f"\n\nYou are {agent}. Reply with a single JSON object and nothing else.",
-        messages=[{"role": "user", "content": prompt}],
-    )
+    model = config.MOTHER_MODEL if agent == config.MOTHER_NAME else config.AGENT_MODEL
+    msg, used = _create(client, model, _fill(DOCTRINE, ctx) + f"\n\nYou are {agent}. Reply with a single JSON object and nothing else.", prompt, 2000 if agent == config.MOTHER_NAME else 1500)
     text = "".join(getattr(b, "text", "") for b in msg.content)
     try:
         result = json.loads(re.search(r"\{.*\}", text, re.S).group(0))
     except Exception:
         result = {"summary": text[:200], "raw": text}
-    c = cost_usd(msg.usage.input_tokens, msg.usage.output_tokens)
+    result.setdefault("_model", used)
+    c = cost_usd(msg.usage.input_tokens, msg.usage.output_tokens, used)
     return result, round(c, 5), result.get("summary", f"{agent} finished")
 
 
@@ -108,6 +119,8 @@ def canned(prompt_file: str, ctx: dict) -> dict:
         if "cap" in msg or "account" in msg or "payout" in msg: return {"action": "escalate", "reason": "money or account standing involved"}
         if "timeout" in msg or "rate limit" in msg or "latency" in msg or "network" in msg: return {"action": "retry" if n < 3 else "hold", "reason": "transient upstream failure"}
         return {"action": "watch", "reason": "logged; no repeat yet"}
+    if "listing_review" in prompt_file:
+        return {"summary": "Reviewed: ship it", "verdict": random.choice(["approve", "approve", "approve", "reject"]), "reason": "concept matches the brief; title is specific; disclosure present", "fixes": []}
     if "mission" in prompt_file:
         m = ctx.get("mission") or {}
         leg = m.get("leg", 1); nxt = (m.get("next_waypoint") or {}).get("name", "the next waypoint")

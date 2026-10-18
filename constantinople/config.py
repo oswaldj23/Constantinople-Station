@@ -17,7 +17,9 @@ DB_PATH       = str(ROOT / os.getenv("DB_PATH", "constantinople.db"))
 SPEED         = float(os.getenv("SPEED", "1.0"))
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY") or None
-AGENT_MODEL       = os.getenv("AGENT_MODEL", "claude-sonnet-4-5")
+AGENT_MODEL       = os.getenv("AGENT_MODEL", "claude-sonnet-4-5")       # the crew
+MOTHER_MODEL      = os.getenv("MOTHER_MODEL", "claude-opus-4-1")        # the overseer: strongest tier, few calls a day
+MODEL_FALLBACKS   = [m for m in os.getenv("MODEL_FALLBACKS", "claude-sonnet-4-5,claude-3-5-sonnet-latest").split(",") if m]
 IMAGE_PROVIDER    = os.getenv("IMAGE_PROVIDER", "none")
 IMAGE_API_KEY     = os.getenv("IMAGE_API_KEY") or None
 PRINTIFY_API_KEY  = os.getenv("PRINTIFY_API_KEY") or None
@@ -57,7 +59,10 @@ def integrations() -> dict:
             "auto_retire": AUTO_RETIRE, "auto_price": AUTO_PRICE}
 
 # USD per 1M tokens, used to cost every agent step. Adjust to the model you run.
-PRICES = {
+PRICES = {   # matched by substring of the model name
+    "opus": {"in": 15.0, "out": 75.0},
+    "sonnet": {"in": 3.0, "out": 15.0},
+    "haiku": {"in": 0.8, "out": 4.0},
     "default": {"in": 3.0, "out": 15.0},
 }
 IMAGE_COST_USD = 0.04   # per generated image, rough; override per provider in tools/images.py
