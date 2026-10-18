@@ -37,12 +37,14 @@ def main(argv=None):
     if a.cmd == "footage":
         import subprocess, json as _j, shutil as _sh
         d = config.ROOT / "footage"; d.mkdir(exist_ok=True)
-        if not _sh.which("yt-dlp"): subprocess.run([sys.executable, "-m", "pip", "install", "-q", "yt-dlp"])
-        info = subprocess.run(["yt-dlp", "-J", "--no-playlist", a.url], capture_output=True, text=True)
+        try: import yt_dlp  # noqa
+        except ImportError: subprocess.run([sys.executable, "-m", "pip", "install", "-q", "yt-dlp"])
+        ytdlp = [sys.executable, "-m", "yt_dlp"]
+        info = subprocess.run([*ytdlp, "-J", "--no-playlist", a.url], capture_output=True, text=True)
         if info.returncode != 0: sys.exit("could not read that video: " + info.stderr[-300:])
         meta = _j.loads(info.stdout); credit = a.credit or (meta.get("uploader") or meta.get("channel") or "") ; title = meta.get("title", "")
         print(f"Downloading: {title}\n  credit: {credit}")
-        r = subprocess.run(["yt-dlp", "--no-playlist", "-f", "bv*[height<=1080][ext=mp4]/b[height<=1080]/b", "--merge-output-format", "mp4", "-o", str(d / "%(id)s.%(ext)s"), a.url])
+        r = subprocess.run([*ytdlp, "--no-playlist", "-f", "bv*[height<=1080][ext=mp4]/b[height<=1080]/b", "--merge-output-format", "mp4", "-o", str(d / "%(id)s.%(ext)s"), a.url])
         if r.returncode != 0: sys.exit("download failed")
         fname = f"{meta.get('id')}.mp4"
         with open(d / "CREDITS.txt", "a") as fh: fh.write(f"{fname} | {credit} (YouTube) · {title[:80]}\n")
