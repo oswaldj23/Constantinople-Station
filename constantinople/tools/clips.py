@@ -149,7 +149,7 @@ async def scenes(ctx, *, script_from: str = "script", dry_run: bool = True, **_)
     d = OUT / ctx["run_id"]; d.mkdir(parents=True, exist_ok=True)
     pool = list((ctx.get("assets") or {}).get("images") or []) + list((ctx.get("clip_order") or {}).get("images") or [])
     listing = ctx.get("listing") or {}
-    if not listing and sc.get("kind") == "product" and ctx.get("_ledger") is not None:
+    if not listing and ctx.get("_ledger") is not None:
         listing = latest_assets_from_listing(ctx["_ledger"])
     for m in (listing.get("mockups") or [])[:4]: pool.append(m)
     for f in (listing.get("designs") or [])[:2]: pool.append(f)
@@ -162,21 +162,62 @@ async def scenes(ctx, *, script_from: str = "script", dry_run: bool = True, **_)
                 r = httpx.get(p, timeout=30); lp = d / f"asset_{i}.jpg"; lp.write_bytes(r.content); local.append(str(lp))
             except Exception: pass
         else: local.append(str(p))
-    frames = []; cost = 0.0
+    if not local and not dry_run:
+        # a product short with nothing real to show is not worth making; AI-drawn shirts come out with garbled text
+        return {"frames": [], "cost": 0.0, "incident": "Product short needs real product photos and the latest listing has no mockups yet · skipped (make a story instead)"}
+    frames = []; cost = 0.0; rejected = 0
     for i, b in enumerate(beats):
         src = local[i % len(local)] if local else None
-        if not src and not dry_run and config.IMAGE_API_KEY and config.IMAGE_PROVIDER != "none" and b.get("visual"):
-            try:
-                import httpx
-                r = httpx.post("https://api.openai.com/v1/images/generations", headers={"Authorization": f"Bearer {config.IMAGE_API_KEY}"},
-                               json={"model": "gpt-image-1", "prompt": b["visual"] + " Cinematic vertical photo, soft light, no text.", "n": 1, "size": "1024x1536", "quality": "low"}, timeout=120)
-                if r.status_code == 200:
-                    src = str(d / f"broll_{i}.png"); Path(src).write_bytes(base64.b64decode(r.json()["data"][0]["b64_json"])); cost += 0.02
-            except Exception: pass
+        wants_product = any(w in (b.get("visual") or "").lower() for w in ("design", "tee", "shirt", "mug", "tote", "print", "shop", "card", "logo", "mockup"))
+        if local and not wants_product and not dry_run and config.IMAGE_API_KEY and config.IMAGE_PROVIDER != "none" and b.get("visual") and i not in (0, len(beats) - 1):
+            # a contextual b-roll still (the scene, not the product); product beats always use the real mockups
+            gen = _broll(b["visual"], d / f"broll_{i}.png")
+            if gen: src = gen; cost += 0.04
+            else: rejected += 1
         out = d / f"scene_{i:02d}.jpg"
         _compose_frame(src, out, title=b.get("title") if i == 0 else None, fallback_text=None if src else b.get("line"), seed=i + len(ctx["run_id"]))
         frames.append(str(out))
-    return {"frames": frames, "cost": round(cost, 3), "summary": f"{len(frames)} scene(s) composed" + (f" from {len(local)} product image(s)" if local else "")}
+    return {"frames": frames, "cost": round(cost, 3), "summary": f"{len(frames)} scene(s) composed" + (f" from {len(local)} product image(s)" if local else "") + (f" · {rejected} AI still(s) rejected by QA" if rejected else "")}
+
+
+BROLL_RULES = " Photorealistic vertical photograph, soft natural light, one single scene. Absolutely no text, letters, numbers, logos, signs, labels or packaging with writing. No people, no faces, no hands, no mannequins or robots. Not a collage or grid."
+
+
+def _inspect(path: str) -> tuple[bool, str]:
+    """Ask the model to look at a generated still before we use it: any text, faces, collages or distortions → reject.
+    Returns (ok, reason). Without a model key, accept."""
+    if not config.ANTHROPIC_API_KEY: return True, "no model key"
+    try:
+        import anthropic
+        from PIL import Image
+        im = Image.open(path).convert("RGB"); im.thumbnail((768, 768)); import io
+        buf = io.BytesIO(); im.save(buf, "JPEG", quality=80)
+        c = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+        msg = c.messages.create(model=config.AGENT_MODEL, max_tokens=120, messages=[{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.b64encode(buf.getvalue()).decode()}},
+            {"type": "text", "text": "You are quality control for a video still. Reject if it contains ANY text/letters/words (even blurry), any human face or body, mannequins/robots, a grid or collage of several images, or obviously distorted/melted objects. Reply with exactly one line: OK, or REJECT: <reason>."}]}])
+        t = "".join(getattr(b, "text", "") for b in msg.content).strip()
+        return (t.upper().startswith("OK"), t[:120])
+    except Exception as e:
+        return True, f"qa skipped ({type(e).__name__})"
+
+
+def _broll(visual: str, out: Path) -> str | None:
+    """Generate one AI still for a scene, QA it, retry once with a stricter prompt, else give up (None)."""
+    import httpx
+    for attempt, prompt in enumerate((visual + BROLL_RULES, "Simple, calm close-up still life: " + visual + BROLL_RULES + " Minimal, few objects, plain background.")):
+        try:
+            r = httpx.post("https://api.openai.com/v1/images/generations", headers={"Authorization": f"Bearer {config.IMAGE_API_KEY}"},
+                           json={"model": "gpt-image-1", "prompt": prompt, "n": 1, "size": "1024x1536", "quality": "medium"}, timeout=180)
+            if r.status_code != 200: return None
+            out.write_bytes(base64.b64decode(r.json()["data"][0]["b64_json"]))
+            ok, why = _inspect(str(out))
+            if ok: return str(out)
+        except Exception:
+            return None
+    try: out.unlink()
+    except Exception: pass
+    return None
 
 
 # ── 2b. background video (story formats) ────────────────────────────────
