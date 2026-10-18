@@ -6,12 +6,14 @@ cadence_seconds: 28800         # three shorts a day (YouTube allows ~6 uploads/d
 artifact: clip
 complete_msg: "Short live: {title}"
 steps:
-  - {id: script,     name: Script,       kind: agent, agent: REEL, prompt: clip_script.md}
+  - {id: script,     name: Script,       kind: agent, agent: REEL, prompt: clip_script.md, skip_if_present: script}
   - {id: voiceover,  name: Voiceover,    kind: tool,  tool: clips.voiceover, agent: VOX,
-     gate: approve_spend, gate_summary: "Clip Forge wants to cut \"{title}\" (voice + b-roll ≈ $0.05)", est_cost: 0.05}
+     gate: approve_spend, gate_summary: "Clip Forge wants to cut \"{title}\" (voice + background ≈ $0.05)", est_cost: 0.05}
+  - {id: background, name: Background,   kind: tool,  tool: clips.background, agent: CUT, pause: 0.2}
   - {id: scenes,     name: Scenes,       kind: tool,  tool: clips.scenes, agent: CUT}
   - {id: render,     name: Render,       kind: tool,  tool: clips.render, agent: CUT, pause: 0.2}
   - {id: mother_review, name: Mother's review, kind: agent, agent: MOTHER, prompt: clip_review.md, verdict_from: verdict}
   - {id: upload,     name: Upload,       kind: tool,  tool: youtube.upload, agent: REEL,
      gate: approve_publish, gate_summary: "Clip Forge wants to post \"{title}\" to YouTube Shorts", emit: publish, transfer_to: launch}
+  - {id: part2,      name: Part two,     kind: tool,  tool: clips.queue_part2, agent: REEL, quiet: true, fanout: {part2_seeds: clips}}
   - {id: handoff,    name: TikTok handoff, kind: noop, summary: "Clip sent to the bridge for TikTok", agent: REEL}

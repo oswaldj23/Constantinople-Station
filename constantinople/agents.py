@@ -113,22 +113,43 @@ def canned(prompt_file: str, ctx: dict) -> dict:
                  {"line": cta, "visual": "logo card on dark background"}]
         return {"summary": f"Script drafted for {niche} order", "title": f"The {niche} mistake everyone makes", "kind": "order", "genre": niche, "voiceover": " ".join(b["line"] for b in beats), "beats": beats, "caption": o.get("brief", "")[:180] or f"A {niche} short.", "hashtags": ["#shorts", f"#{niche.replace(' ', '')}"]}
     if "clip" in prompt_file:
-        sig = ctx.get("signal") or {}; picks = sig.get("picks") or [{"genre": "cozy aesthetic"}]; g = random.choice(picks)["genre"]
-        ll = ctx.get("latest_listing"); product = isinstance(ll, dict) and bool(ll.get("title"))
-        subject = (ll.get("title").split("|")[0].strip() if product else g)
-        beats = [{"line": f"This {subject.lower()} took three tries to get right.", "visual": f"the {subject} design flat on a cream tee" if product else f"a {g} scene in morning light", "title": "THREE TRIES"},
-                 {"line": "The first one was too busy; nobody could read it from across a room.", "visual": "the design cropped tight, lines and texture"},
-                 {"line": "The second lost the warmth we were after.", "visual": "two colour swatches side by side, cream and sage"},
-                 {"line": "The third kept the hand-drawn line and dropped everything else.", "visual": "final design, centred, lots of negative space"},
-                 {"line": "It prints to order and ships in three to five days.", "visual": "the tee folded on a wooden table"},
-                 {"line": f"It is live in the shop now; the name is {config.STATION_NAME.split()[0]}.", "visual": "shop name card on dark background"}]
-        return {"summary": f"Script drafted: {subject}", "title": f"{subject}: three tries to get it right", "kind": "product" if product else "genre", "genre": g,
-                "voiceover": " ".join(b["line"] for b in beats), "beats": beats, "caption": f"Made to order, shipped in 3-5 days. {config.STATION_NAME}.", "hashtags": ["#shorts", "#etsy", "#smallbusiness", "#handdrawn", "#" + g.replace(" ", "")]}
+        sig = ctx.get("signal") or {}; picks = sig.get("picks") or [{"genre": "scary stories", "format": "horror"}]; pk = random.choice(picks)
+        fmt = pk.get("format") or "horror"; g = pk.get("genre", "scary stories")
+        stories = {
+            "horror": ("I found a second door in my apartment that isn't on the lease.", "A second door that isn't on the lease",
+                       "I found a second door in my apartment that isn't on the lease. It's behind the water heater, painted the same beige as the wall, and the landlord swears the unit has one entrance. I only noticed because the cat sits in front of it every night at the same time. Last week I put a strip of tape across the gap at the bottom. In the morning the tape was on the floor, folded in half, neatly. I didn't open it. I bought a camera instead and pointed it at the door. The first night it recorded nothing for six hours, then the picture went black for four minutes. When it came back the cat was in the hallway, staring at the camera, not the door. Part two is on the channel.",
+                       "Part one: a door behind my water heater that isn't on the lease, and a camera that went black for four minutes. I watched the clip frame by frame. The last frame before the blackout isn't black. It's the hallway, from a few inches lower than where I mounted the camera, as if someone had taken it off the wall and turned it around. The landlord came by today. He didn't look at the door. He looked at the cat, said he'd send someone, and left his keys on my counter by mistake. One of them is older than the rest. I haven't tried it yet."),
+            "aita": ("AITA for leaving my sister's wedding before the first dance?", "AITA for leaving my sister's wedding early?",
+                     "AITA for leaving my sister's wedding before the first dance? Context: I paid for her dress, about two thousand dollars, as my gift. At the reception the DJ did a toast and thanked her new husband's family for the dress. I let it go. Then she took the mic and did the same thing. My mom said don't make a scene. So I didn't. I finished my dinner, hugged my grandmother, and left before the first dance. Now the family group chat says I ruined the night and I owe her an apology. She says she just forgot. I think you don't forget two thousand dollars. So, am I the asshole?",
+                     None),
+            "revenge": ("My neighbor kept parking in my spot, so I made it his problem.", "He kept parking in my spot",
+                        "My neighbor kept parking in my spot, so I made it his problem. Assigned spots, clearly numbered, and every Friday his truck was in mine. Notes didn't work. Building management didn't care. So I checked the lease. Guests can be towed from assigned spots at the owner's request, no warning needed. I didn't tow him. I did better. I started parking in his spot, every Friday, five minutes before he got home. He'd come find me, I'd say sorry, mine was taken, then move mine the moment his was free. Took three weeks. He never parked in my spot again, and he still thinks it was a coincidence.",
+                        None),
+            "story": ("A stranger paid for my groceries and left me a note I still have.", "The note a stranger left me",
+                      "A stranger paid for my groceries and left me a note I still have. I was twenty, counting coins at the register, pretending I'd forgotten my card. The woman behind me said she had a coupon for exactly my total, which is not a thing. She paid, and she handed me a folded receipt. On the back, in pencil: you'll be the one behind someone in line one day. That was eleven years ago. Last month a kid in front of me was doing the coin thing. I had a coupon for exactly his total. I wrote the same thing on the back of the receipt. I hope he keeps it.",
+                      None),
+            "facts": ("Five things about sleep that sound fake but aren't.", "Sleep facts that sound fake",
+                      "Five things about sleep that sound fake but aren't. One: you forget most of your dreams within ten minutes of waking. Two: humans are the only mammals that willingly delay sleep. Three: a cat sleeps roughly two thirds of its life. Four: before electric light, many people slept in two shifts with an hour awake in between. Five: the record for staying awake is eleven days, and the man who set it was a seventeen-year-old doing a school science project.",
+                      None),
+        }
+        if fmt == "product" or ("product" in prompt_file):
+            ll = ctx.get("latest_listing"); subject = (ll.get("title").split("|")[0].strip() if isinstance(ll, dict) and ll.get("title") else "the new design")
+            beats = [{"line": f"This {subject.lower()} took three tries to get right.", "visual": f"the {subject} design flat on a cream tee"},
+                     {"line": "The first one was too busy; nobody could read it from across a room.", "visual": "the design cropped tight"},
+                     {"line": "The third kept the hand-drawn line and dropped everything else.", "visual": "final design, centred"},
+                     {"line": f"It prints to order and ships in three to five days. The shop is {config.STATION_NAME.split()[0]}.", "visual": "shop name card"}]
+            return {"summary": f"Script drafted: {subject}", "format": "product", "kind": "product", "genre": "etsy small business", "title": f"{subject}: three tries to get it right", "hook_card": "THREE TRIES",
+                    "voiceover": " ".join(b["line"] for b in beats), "beats": beats, "caption": f"Made to order. {config.STATION_NAME}.", "hashtags": ["#shorts", "#etsy", "#smallbusiness"], "part2": None}
+        hook, card, vo, p2 = stories.get(fmt, stories["story"])
+        return {"summary": f"Script drafted ({fmt}): {card}", "format": fmt, "kind": "genre", "genre": g, "title": hook.rstrip(".") , "hook_card": card,
+                "voiceover": vo, "beats": [{"line": vo}], "caption": hook + (" Part 1." if p2 else ""), "hashtags": ["#shorts", "#" + g.replace(" ", ""), "#storytime", "#" + fmt],
+                "part2": ({"title": hook.rstrip(".") + " · Part 2", "hook_card": "Part 2 · " + card, "voiceover": p2, "caption": hook + " Part 2.", "hashtags": ["#shorts", "#" + fmt, "#part2"]} if p2 else None)}
     if "signal" in prompt_file:
         rows = (ctx.get("shorts_scan") or {}).get("genres") or [{"genre": "cozy aesthetic", "top_views": 1000000, "supply": 100}]
-        picks = [{"genre": r["genre"], "format": "fast cuts, 3-word captions, hook in first second", "why": f"{r.get('top_views',0):,} top views vs {r.get('supply',0):,} uploads", "hook": f"Nobody tells you this about {r['genre']}"} for r in rows[:3]]
+        fmap = {"scary": "horror", "creepy": "horror", "aita": "aita", "revenge": "revenge", "fact": "facts", "history": "facts", "etsy": "product"}
+        picks = [{"genre": r["genre"], "format": next((v for k, v in fmap.items() if k in r["genre"]), "story"), "pattern": "first-person hook stating the whole premise", "why": f"{r.get('top_views',0):,} top views vs {r.get('supply',0):,} uploads", "hook": f"Nobody tells you this about {r['genre']}"} for r in rows[:3]]
         return {"summary": f"Picks: {', '.join(p['genre'] for p in picks)}", "picks": picks, "hooks": [p["hook"] for p in picks] + ["This took three tries", "The one thing most shops get wrong"],
-                "avoid": ["gameplay footage we do not own", "trending audio", "reposted clips"], "product_angle": "show the newest design on a tee for the first two seconds, then tell its story"}
+                "avoid": ["gameplay footage we do not own", "trending audio", "reposted posts or clips", "real names"], "product_angle": "none"}
     if "listing_review" in prompt_file:
         return {"summary": "Reviewed: ship it", "verdict": random.choice(["approve", "approve", "approve", "reject"]), "reason": "concept matches the brief; title is specific; disclosure present", "fixes": []}
     if "listing" in prompt_file:

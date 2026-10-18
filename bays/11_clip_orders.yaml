@@ -8,6 +8,7 @@ complete_msg: "Client short delivered: {title}"
 steps:
   - {id: script,     name: Script,       kind: agent, agent: REEL, prompt: clip_order_script.md}
   - {id: voiceover,  name: Voiceover,    kind: tool,  tool: clips.voiceover, agent: VOX}
+  - {id: background, name: Background,   kind: tool,  tool: clips.background, agent: CUT, pause: 0.2}
   - {id: scenes,     name: Scenes,       kind: tool,  tool: clips.scenes, agent: CUT}
   - {id: render,     name: Render,       kind: tool,  tool: clips.render, agent: CUT, pause: 0.2}
   - {id: mother_review, name: Mother's review, kind: agent, agent: MOTHER, prompt: clip_review.md, verdict_from: verdict}

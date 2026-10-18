@@ -10,6 +10,25 @@ from .. import config
 
 OUT = config.ROOT / "output" / "clips"
 MUSIC_DIR = config.ROOT / "music"            # drop royalty-free .mp3 loops here; one is picked at random
+FOOTAGE_DIR = config.ROOT / "footage"        # drop YOUR OWN recorded gameplay / satisfying footage here (.mp4); random segments become backgrounds
+
+# What kind of short this is decides the voice, the pacing, the length window and the background.
+FORMATS = {
+    "horror":  {"voice": "ash",   "speed": 0.97, "len": (45, 90),  "bg": "dark",   "accent": "&H005E4FFF",
+                "instructions": "Low, calm, unsettling narrator telling a true-feeling scary story. Slow down at the reveal. Breathy pauses. Never shout."},
+    "aita":    {"voice": "nova",  "speed": 1.06, "len": (45, 90),  "bg": "warm",   "accent": "&H0073FF3D",
+                "instructions": "Conversational, slightly exasperated, like reading a confession out loud to a friend. Natural rhythm, light emphasis on the twist."},
+    "revenge": {"voice": "echo",  "speed": 1.04, "len": (45, 90),  "bg": "warm",   "accent": "&H004DD2FF",
+                "instructions": "Dry, confident storyteller with a smirk. Build to the payoff, land it flat."},
+    "story":   {"voice": "coral", "speed": 1.04, "len": (40, 80),  "bg": "warm",   "accent": "&H00F0D945",
+                "instructions": "Warm, candid story-time voice. Curious, a little amused, present tense energy."},
+    "facts":   {"voice": "onyx",  "speed": 1.08, "len": (25, 50),  "bg": "cool",   "accent": "&H0073FF3D",
+                "instructions": "Crisp documentary narrator. Short sentences, confident, no filler."},
+    "product": {"voice": "onyx",  "speed": 1.04, "len": (15, 35),  "bg": "scenes", "accent": "&H0073FF3D",
+                "instructions": "Warm, confident, unhurried narrator for a short product video. Natural pauses. No shouting."},
+}
+def fmt_of(sc: dict) -> dict:
+    return FORMATS.get((sc or {}).get("format") or ("product" if (sc or {}).get("kind") == "product" else "story"), FORMATS["story"])
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 W, H, FPS = 1080, 1920, 30
 
@@ -45,17 +64,18 @@ async def voiceover(ctx, *, script_from: str = "script", voice: str = None, dry_
     sc = ctx.get(script_from) or {}
     text = sc.get("voiceover") or " ".join(b.get("line", "") for b in sc.get("beats", []))
     d = OUT / ctx["run_id"]; d.mkdir(parents=True, exist_ok=True); mp3 = d / "voice.mp3"
+    F = fmt_of(sc)
     if dry_run or not config.IMAGE_API_KEY:
         # silent placeholder of a plausible length so timing code runs
-        dur = max(8, min(40, len(text.split()) / 2.6))
+        dur = max(8, min(90, len(text.split()) / 2.6))
         _ffmpeg("-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", "-t", f"{dur:.1f}", "-q:a", "9", str(mp3))
         return {"file": str(mp3), "duration": dur, "words": None, "cost": 0.0, "summary": f"voiceover placeholder · {dur:.0f}s"}
     import httpx
-    voice = voice or config.TTS_VOICE
-    async with httpx.AsyncClient(timeout=120) as c:
+    voice = voice or sc.get("voice") or F["voice"] or config.TTS_VOICE
+    async with httpx.AsyncClient(timeout=180) as c:
         r = await c.post("https://api.openai.com/v1/audio/speech", headers={"Authorization": f"Bearer {config.IMAGE_API_KEY}"},
-                         json={"model": config.TTS_MODEL, "voice": voice, "input": text, "response_format": "mp3", "speed": 1.04,
-                               "instructions": "Warm, confident, unhurried narrator for a short product video. Natural pauses. No shouting."})
+                         json={"model": config.TTS_MODEL, "voice": voice, "input": text, "response_format": "mp3", "speed": F["speed"],
+                               "instructions": F["instructions"]})
         if r.status_code >= 400: return {"summary": "tts failed", "incident": f"Voice provider error · {r.status_code} {r.text[:120]}", "cost": 0.0}
         mp3.write_bytes(r.content)
         # word timings for captions
@@ -124,6 +144,8 @@ async def scenes(ctx, *, script_from: str = "script", dry_run: bool = True, **_)
     """One frame per beat. Sources, in order of preference: the beat's own image, the listing mockups,
     the design files, an AI b-roll still (if images are on), else a typographic card."""
     sc = ctx.get(script_from) or {}; beats = sc.get("beats") or [{"line": sc.get("voiceover", "")}]
+    if fmt_of(sc)["bg"] != "scenes":
+        return {"frames": [], "cost": 0.0, "summary": "story format · background video instead of scenes"}
     d = OUT / ctx["run_id"]; d.mkdir(parents=True, exist_ok=True)
     pool = list((ctx.get("assets") or {}).get("images") or []) + list((ctx.get("clip_order") or {}).get("images") or [])
     listing = ctx.get("listing") or {}
@@ -157,9 +179,59 @@ async def scenes(ctx, *, script_from: str = "script", dry_run: bool = True, **_)
     return {"frames": frames, "cost": round(cost, 3), "summary": f"{len(frames)} scene(s) composed" + (f" from {len(local)} product image(s)" if local else "")}
 
 
+# ── 2b. background video (story formats) ────────────────────────────────
+def _footage_segment(dur: float, out: Path, exclude: str | None = None) -> str | None:
+    """A random slice of the Creator's own footage, cropped to 9:16. Returns the source name or None."""
+    if not FOOTAGE_DIR.exists(): return None
+    files = [p for p in FOOTAGE_DIR.iterdir() if p.suffix.lower() in (".mp4", ".mov", ".mkv", ".webm")]
+    if not files: return None
+    src = random.choice(files); total = _ffprobe_duration(src)
+    if total < dur + 2:
+        # too short: loop it
+        _ffmpeg("-stream_loop", "-1", "-i", str(src), "-t", f"{dur:.2f}", "-an", "-vf", f"scale=-2:{H},crop={W}:{H},eq=brightness=-0.04,fps={FPS}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", str(out))
+    else:
+        start = random.uniform(1, total - dur - 1)
+        _ffmpeg("-ss", f"{start:.2f}", "-t", f"{dur:.2f}", "-i", str(src), "-an", "-vf", f"scale=-2:{H},crop={W}:{H},eq=brightness=-0.04,fps={FPS}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", str(out))
+    return src.name
+
+
+def _procedural_bg(style: str, dur: float, out: Path):
+    """Station-made motion backgrounds we own outright: a slow fractal dive for dark stories, a drifting
+    colour field for warm ones, a cool version for facts. ~1x realtime to render."""
+    if style == "dark":
+        src = "mandelbrot=size=540x960:rate=30:maxiter=160:start_scale=3:end_scale=0.05:end_pts=800:inner=convergence:outer=normalized_iteration_count"
+        vf = f"scale={W}:{H}:flags=lanczos,hue=H=t*0.12:s=0.55,eq=contrast=1.05:brightness=-0.22:gamma=0.85"
+    elif style == "cool":
+        src = "gradients=size=270x480:rate=30:speed=0.015:nb_colors=4:c0=#061a2b:c1=#0b3d4f:c2=#1f8c45:c3=#12233b:type=spiral"
+        vf = f"scale={W}:{H}:flags=bicubic,gblur=sigma=30,hue=H=t*0.1,noise=alls=5:allf=t,eq=brightness=-0.08"
+    else:
+        src = "gradients=size=270x480:rate=30:speed=0.015:nb_colors=5:c0=#120f2b:c1=#3a1c71:c2=#b8336a:c3=#ff7a59:c4=#0b3d4f:type=spiral"
+        vf = f"scale={W}:{H}:flags=bicubic,gblur=sigma=30,hue=H=t*0.15,noise=alls=6:allf=t,eq=brightness=-0.1:saturation=1.1"
+    _ffmpeg("-f", "lavfi", "-i", src, "-t", f"{dur:.2f}", "-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", str(out), timeout=900)
+
+
+async def background(ctx, *, dry_run: bool = True, **_):
+    """Pick the moving background for a story short: the Creator's own footage if any is in footage/, else a
+    station-generated one. Product shorts use composed scenes instead and skip this."""
+    sc = ctx.get("script") or {}; F = fmt_of(sc)
+    if F["bg"] == "scenes": return {"file": None, "cost": 0.0, "summary": "product format · composed scenes"}
+    if not _have_ffmpeg(): return {"summary": "ffmpeg missing", "incident": INSTALL_HINT, "cost": 0.0}
+    vo = ctx.get("voiceover") or {}; dur = float(vo.get("duration") or 30) + 0.6
+    d = OUT / ctx["run_id"]; d.mkdir(parents=True, exist_ok=True); out = d / "bg.mp4"
+    try:
+        name = _footage_segment(dur, out)
+        if name: return {"file": str(out), "source": f"footage/{name}", "cost": 0.0, "summary": f"background: your footage ({name})"}
+        _procedural_bg(F["bg"], dur, out)
+        return {"file": str(out), "source": f"generated:{F['bg']}", "cost": 0.0, "summary": f"background: station-generated ({F['bg']}) · drop your own gameplay in footage/ to use it instead"}
+    except Exception as e:
+        return {"summary": "background failed", "incident": f"Background render failed · {str(e)[:160]}", "cost": 0.0}
+
+
 # ── 3. captions ──────────────────────────────────────────────────────────
-def _ass(words, duration, path: Path, text_fallback: str):
-    """Karaoke-style captions: 3–4 words per card, big, centred low, each word brightening as it is spoken."""
+def _ass(words, duration, path: Path, text_fallback: str, title: str | None = None, accent: str = "&H0073FF3D", story: bool = False):
+    """Karaoke-style captions: 3 words per card, big, centred, each word lighting up as it is spoken.
+    Story formats get a title card (the hook) for the first seconds and captions in the middle of the frame."""
+    marginv = 880 if story else 420
     head = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {W}
@@ -168,18 +240,22 @@ WrapStyle: 2
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Cap,DejaVu Sans,78,&H00FFFFFF,&H0073FF3D,&H00000000,&H96000000,-1,0,0,0,100,100,1,0,1,6,2,2,60,60,420,1
+Style: Cap,DejaVu Sans,72,&H00FFFFFF,{accent},&H00000000,&H96000000,-1,0,0,0,100,100,1,0,1,7,3,2,80,80,{marginv},1
+Style: Title,DejaVu Sans,60,&H00FFFFFF,&H00FFFFFF,&H00000000,&HA0000000,-1,0,0,0,100,100,0,0,3,14,0,8,90,90,210,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     def ts(t): h = int(t // 3600); m = int(t % 3600 // 60); s = t % 60; return f"{h}:{m:02d}:{s:05.2f}"
     lines = []
+    if title:
+        tw = textwrap.wrap(title, 24)[:3]
+        head += f"Dialogue: 1,{ts(0)},{ts(min(4.5, duration))},Title,,0,0,0,,{{\\fad(120,300)}}{'\\N'.join(tw)}\n"
     if words:
         chunk = []
         for w in words:
             chunk.append(w)
-            if len(chunk) >= 4 or w["w"].strip().endswith((".", "!", "?", ",")):
+            if len(chunk) >= 3 or w["w"].strip().endswith((".", "!", "?", ",")) or sum(len(x["w"]) for x in chunk) > 22:
                 lines.append(chunk); chunk = []
         if chunk: lines.append(chunk)
         for ch in lines:
@@ -189,10 +265,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 k = max(1, int((w["e"] - w["s"]) * 100)); parts.append(f"{{\\kf{k}}}{w['w'].strip().upper()}")
             head += f"Dialogue: 0,{ts(s)},{ts(e)},Cap,,0,0,0,,{{\\fad(60,60)}}{' '.join(parts)}\n"
     else:
-        ws = text_fallback.split(); n = max(1, len(ws) // 4); per = duration / n
+        ws = text_fallback.split(); n = max(1, len(ws) // 3); per = duration / n
         for i in range(n):
             s, e = i * per, (i + 1) * per
-            head += f"Dialogue: 0,{ts(s)},{ts(e)},Cap,,0,0,0,,{{\\fad(60,60)}}{' '.join(ws[i*4:(i+1)*4]).upper()}\n"
+            head += f"Dialogue: 0,{ts(s)},{ts(e)},Cap,,0,0,0,,{{\\fad(60,60)}}{' '.join(ws[i*3:(i+1)*3]).upper()}\n"
     path.write_text(head, encoding="utf-8")
 
 
@@ -202,22 +278,33 @@ async def render(ctx, *, dry_run: bool = True, **_):
     vo = ctx.get("voiceover") or {}; sc = ctx.get("scenes") or {}; script = ctx.get("script") or {}
     d = OUT / ctx["run_id"]; d.mkdir(parents=True, exist_ok=True); out = d / "short.mp4"
     frames = sc.get("frames") or []; dur = float(vo.get("duration") or 15)
-    if not frames:
+    F = fmt_of(script); bg = (ctx.get("background") or {}).get("file")
+    story = F["bg"] != "scenes"
+    if story and not bg:
+        # no background step ran (or it failed quietly): make one now rather than falling back to a black card
+        try: _procedural_bg(F["bg"], dur + 0.6, d / "bg.mp4"); bg = str(d / "bg.mp4")
+        except Exception: bg = None
+    if not frames and not bg:
         _compose_frame(None, d / "scene_00.jpg", title=script.get("title") or "Constantinople Station"); frames = [str(d / "scene_00.jpg")]
-    n = len(frames); per = max(1.5, dur / n); xf = min(0.5, per / 4)
-    _ass(vo.get("words"), dur, d / "captions.ass", script.get("voiceover") or " ".join(b.get("line", "") for b in script.get("beats", [])))
-    # build filtergraph: each frame → Ken Burns clip of `per` seconds; chain with xfade
+    _ass(vo.get("words"), dur, d / "captions.ass", script.get("voiceover") or " ".join(b.get("line", "") for b in script.get("beats", [])),
+         title=(script.get("hook_card") or script.get("title")) if story else None, accent=F["accent"], story=story)
+    sub = str(d / "captions.ass").replace("\\", "/").replace(":", "\\:")
     inputs = []; filt = []
-    for i, f in enumerate(frames):
+    if bg:
+        n = 1; inputs = ["-i", bg]
+        filt.append(f"[0:v]scale={W}:{H},setsar=1,format=yuv420p,subtitles='{sub}',fade=t=in:st=0:d=0.4,fade=t=out:st={max(0.1,dur-0.5):.2f}:d=0.5[vout]")
+    n = 1 if bg else len(frames); per = max(1.5, dur / n); xf = min(0.5, per / 4)
+    # build filtergraph: each frame → Ken Burns clip of `per` seconds; chain with xfade
+    for i, f in (enumerate(frames) if not bg else []):
         inputs += ["-loop", "1", "-t", f"{per + xf:.2f}", "-i", f]
         zoom_in = (i % 2 == 0)
         z = "min(zoom+0.0009,1.14)" if zoom_in else "if(eq(on,1),1.14,max(zoom-0.0009,1.0))"
         filt.append(f"[{i}:v]scale={W*2}:{H*2},zoompan=z='{z}':d={int((per+xf)*FPS)}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={W}x{H}:fps={FPS},setsar=1,format=yuv420p[v{i}]")
-    chain = "[v0]"; off = per - xf
-    for i in range(1, n):
-        filt.append(f"{chain}[v{i}]xfade=transition=fade:duration={xf:.2f}:offset={off:.2f}[x{i}]"); chain = f"[x{i}]"; off += per
-    sub = str(d / "captions.ass").replace("\\", "/").replace(":", "\\:")
-    filt.append(f"{chain}subtitles='{sub}',fade=t=in:st=0:d=0.4,fade=t=out:st={max(0.1,dur-0.5):.2f}:d=0.5[vout]")
+    if not bg:
+        chain = "[v0]"; off = per - xf
+        for i in range(1, n):
+            filt.append(f"{chain}[v{i}]xfade=transition=fade:duration={xf:.2f}:offset={off:.2f}[x{i}]"); chain = f"[x{i}]"; off += per
+        filt.append(f"{chain}subtitles='{sub}',fade=t=in:st=0:d=0.4,fade=t=out:st={max(0.1,dur-0.5):.2f}:d=0.5[vout]")
     # audio: voice (+ optional music bed, ducked)
     a_in = ["-i", vo["file"]] if vo.get("file") else ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
     music = None
@@ -235,8 +322,19 @@ async def render(ctx, *, dry_run: bool = True, **_):
     except Exception as e:
         return {"summary": "render failed", "incident": f"Render failed · {str(e)[:160]}", "cost": 0.0}
     size = out.stat().st_size / 1e6
-    return {"file": str(out), "thumb": str(d / "thumb.jpg"), "duration": dur, "size_mb": round(size, 1), "cost": 0.0,
-            "summary": f"rendered {dur:.0f}s · {n} scenes · captions {'word-timed' if vo.get('words') else 'estimated'} · {size:.1f} MB"}
+    return {"file": str(out), "thumb": str(d / "thumb.jpg"), "duration": dur, "size_mb": round(size, 1), "format": script.get("format") or ("product" if script.get("kind") == "product" else "story"), "cost": 0.0,
+            "summary": f"rendered {dur:.0f}s · {'background video' if bg else str(n) + ' scenes'} · captions {'word-timed' if vo.get('words') else 'estimated'} · {size:.1f} MB"}
+
+
+async def queue_part2(ctx, *, dry_run: bool = True, **_):
+    """If REEL wrote a part two, hand it to the Forge's queue as a ready script so the next run renders it
+    (the bay's `fanout: {part2_seeds: clips}` delivers it; the script step is skipped because the seed already has one)."""
+    sc = ctx.get("script") or {}; p2 = sc.get("part2")
+    if not p2 or not isinstance(p2, dict) or not p2.get("voiceover"): return {"part2_seeds": [], "cost": 0.0, "summary": "no part two"}
+    seed = {"format": sc.get("format"), "genre": sc.get("genre"), "kind": sc.get("kind", "genre"), "title": p2.get("title") or (sc.get("title", "") + " · Part 2"),
+            "hook_card": p2.get("hook_card") or "Part 2", "voiceover": p2["voiceover"], "beats": [{"line": p2["voiceover"]}], "caption": p2.get("caption") or (sc.get("caption", "") + " Part 2"),
+            "hashtags": p2.get("hashtags") or sc.get("hashtags") or ["#shorts"], "part_of": ctx.get("run_id"), "summary": "part two script (queued)"}
+    return {"part2_seeds": [seed], "cost": 0.0, "summary": "part two queued for the next run"}
 
 
 async def package(ctx, *, dry_run: bool = True, **_):

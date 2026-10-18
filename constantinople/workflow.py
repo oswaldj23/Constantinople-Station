@@ -80,6 +80,8 @@ class Runner:
                 raise Hold()
             L.set_step(bay.id, i)
             agent = st.get("agent") or (bay.agents[0] if bay.agents else "CONSTANTINOPLE")
+            if st.get("skip_if_present") and isinstance(ctx.get(st["skip_if_present"]), dict) and ctx[st["skip_if_present"]]:
+                L.emit(bay.id, "poll", f"{st['name']}: already in hand ({_title(ctx)})", step=i + 1, agent=agent, run_id=run_id); continue
             # approval gate before anything that spends or publishes
             if st.get("gate") and not config.AUTO_APPROVE:
                 if resume and st["id"] == resume["step_id"]:
@@ -170,7 +172,7 @@ class Runner:
 
 
 def target_key(bay_id: str) -> str:
-    return {"studio": "order", "comms": "message", "treasury": "sale", "clip_orders": "clip_order"}.get(bay_id, "input")
+    return {"studio": "order", "comms": "message", "treasury": "sale", "clip_orders": "clip_order", "clips": "script"}.get(bay_id, "input")
 
 
 def _title(ctx: dict) -> str:

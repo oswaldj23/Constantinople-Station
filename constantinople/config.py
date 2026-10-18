@@ -57,7 +57,7 @@ YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET") or None
 YOUTUBE_REFRESH_TOKEN = os.getenv("YOUTUBE_REFRESH_TOKEN") or None
 YOUTUBE_CHANNEL       = os.getenv("YOUTUBE_CHANNEL") or None   # filled by youtube-auth
 CLIP_PRICE     = float(os.getenv("CLIP_PRICE", "35"))          # what one made-to-order short sells for
-SIGNAL_GENRES  = [g.strip() for g in os.getenv("SIGNAL_GENRES", "minecraft parkour,satisfying,asmr,motivation,product review,etsy small business,day in the life,cooking,facts,history,pov,gaming clips,ai art,fitness,finance tips,cozy aesthetic").split(",") if g.strip()]
+SIGNAL_GENRES  = [g.strip() for g in os.getenv("SIGNAL_GENRES", "scary stories,reddit stories,aita,story time,revenge stories,creepypasta,true scary stories,minecraft parkour,satisfying,facts,history,motivation,cozy aesthetic,ai art,etsy small business,day in the life").split(",") if g.strip()]
 
 def integrations() -> dict:
     """What is actually wired up, for the dashboard's setup checklist."""
