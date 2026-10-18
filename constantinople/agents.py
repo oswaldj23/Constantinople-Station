@@ -61,7 +61,10 @@ async def run_agent(agent: str, prompt_file: str, ctx: dict, *, dry_run: bool) -
         from . import memory
         ctx = {**ctx, "mission": mission.state(ctx["_ledger"]), "station": config.STATION_NAME, "_bays": ctx["_ledger"].bays(),
                "memory": memory.digest(ctx["_ledger"]), "winners": ctx["_ledger"].kv_get("winners") or "none yet",
-               "season": __import__("constantinople.calendar", fromlist=["season_note"]).season_note(), "our_results": __import__("constantinople.tools.signal", fromlist=["our_results"]).our_results(ctx["_ledger"]), "product_type": __import__("constantinople.tools.printify", fromlist=["next_product"]).next_product(ctx["_ledger"]),
+               "season": __import__("constantinople.calendar", fromlist=["season_note"]).season_note(),
+               "assigned_style": (lambda st: __import__("constantinople.styles", fromlist=["describe"]).describe(st))(__import__("constantinople.styles", fromlist=["next_style"]).next_style(ctx["_ledger"])),
+               "style_library": __import__("constantinople.styles", fromlist=["library_text"]).library_text(),
+               "style_results": __import__("constantinople.styles", fromlist=["style_performance"]).style_performance(ctx["_ledger"]), "our_results": __import__("constantinople.tools.signal", fromlist=["our_results"]).our_results(ctx["_ledger"]), "product_type": __import__("constantinople.tools.printify", fromlist=["next_product"]).next_product(ctx["_ledger"]),
                "mother": config.MOTHER_NAME, "assigned_format": __import__("constantinople.tools.signal", fromlist=["next_format"]).next_format(ctx["_ledger"]), "recent_clips": [c["title"] for c in __import__("constantinople.tools.signal", fromlist=["recent_clips"]).recent_clips(ctx["_ledger"], 10)] or "none yet",
                "latest_listing": (lambda a: {"title": a[0]["title"], "description": (a[0]["payload"].get("listing_draft") or {}).get("description", "")} if a else "none yet")(ctx["_ledger"].artifacts(kind_filter="listing", limit=1))}
     except Exception:
@@ -95,11 +98,11 @@ def canned(prompt_file: str, ctx: dict) -> dict:
                    "wow_change_pct": random.randint(12, 61), "price_band": [18, 34], "confidence": random.randint(76, 94)} for _ in range(5)]
         occ = (ctx.get("season") or "").split(" in ")[0].replace("Upcoming occasions (design for the nearest ones that are not too late): ", "") if "Upcoming" in (ctx.get("season") or "") else "none"
         return {"summary": f"{len(movers)} movers above threshold; top: {movers[0]['concept']} +{movers[0]['wow_change_pct']}%",
-                "movers": movers, "brief": {"concept": movers[0]["concept"], "occasion": occ, "audience": "gift buyers, 25-44", "angle": "soft, hand-drawn, two-colour", "avoid": "any named brand, character or existing listing's art"}}
+                "movers": movers, "brief": {"concept": movers[0]["concept"], "occasion": occ, "style": (ctx.get("assigned_style") or "botanical").split(" — ")[0], "text": (random.choice(["Plant Mom Era", "Dog Mom", "Coffee First", "Est. 1987", "Nurse Life", "Grateful"]) if "YES" in (ctx.get("assigned_style") or "") else None), "audience": "gift buyers, 25-44", "angle": "soft, hand-drawn, two-colour", "avoid": "any named brand, character or existing listing's art"}}
     if "trend" in prompt_file:
         brief = (ctx.get("research") or {}).get("brief") or {"concept": name}
-        return {"summary": f"Brief locked: {brief['concept']} ({ctx.get('product_type','tee')})", "concept": brief["concept"], "occasion": brief.get("occasion", "none"),
-                "design_prompt": f"flat hand-drawn illustration of a {brief['concept'].replace(' tee','').replace(' mug','')}, two-colour, cream and sage, lots of negative space, no text",
+        return {"summary": f"Brief locked: {brief['concept']} ({ctx.get('product_type','tee')} · {brief.get('style','botanical')})", "concept": brief["concept"], "occasion": brief.get("occasion", "none"), "style": brief.get("style", "botanical"), "text": brief.get("text"),
+                "design_prompt": (f"bold lettering design with the exact words \"{brief['text']}\"" if brief.get("text") else f"flat hand-drawn illustration of a {brief['concept'].replace(' tee','').replace(' mug','')}, two-colour, cream and sage, lots of negative space, no text"),
                 "products": [ctx.get("product_type", "tee")]}
     if "clip_review" in prompt_file:
         r = ctx.get("render") or {}

@@ -59,6 +59,7 @@ YOUTUBE_CHANNEL       = os.getenv("YOUTUBE_CHANNEL") or None   # filled by youtu
 CLIP_PRICE     = float(os.getenv("CLIP_PRICE", "35"))          # what one made-to-order short sells for
 LISTINGS_PER_DAY = float(os.getenv("LISTINGS_PER_DAY", "2"))   # Etsy listings a day (each ~$0.20 fee + ~$0.10 images)
 PRODUCT_ROTATION = os.getenv("PRODUCT_ROTATION", "tee,sweatshirt,mug,tee,tote,hoodie")
+DESIGN_STYLES    = os.getenv("DESIGN_STYLES", "")                # comma list to restrict the style library; empty = all
 SIGNAL_GENRES  = [g.strip() for g in os.getenv("SIGNAL_GENRES", "scary stories,reddit stories,aita,story time,revenge stories,creepypasta,true scary stories,minecraft parkour,satisfying,facts,history,motivation,cozy aesthetic,ai art,etsy small business,day in the life").split(",") if g.strip()]
 
 def integrations() -> dict:

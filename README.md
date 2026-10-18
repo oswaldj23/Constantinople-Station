@@ -66,6 +66,10 @@ It asks four questions (station name, your name, Mother's autonomy, daily cap), 
 
 For unattended running set `AUTONOMY=full` and a `DAILY_SPEND_CAP` you are comfortable losing on a bad day. Mother will handle everything inside those limits and park the rest in escalations for when you check in.
 
+## The design style library
+
+A shop that makes one kind of design reaches one kind of buyer, and most print-on-demand sales on Etsy are **text** designs. `constantinople/styles.py` holds eleven styles — bold typographic sayings, retro varsity, retro sunset, distressed vintage badge, groovy 70s lettering, script quotes, kawaii characters, pet humour, minimalist line art, watercolour, hand-drawn botanical — each with its rules and what it sells for. Research is assigned a style per listing (rotating through all of them until the shop has 10+ listings and 3+ sales, then two picks in three to the styles with the best sales per listing, one in three exploring), writes the exact words for text styles (1–6 words, no brands or lyrics), and Production renders to the style's rules. Every text design is **read back by the vision check** and compared letter for letter to the intended words; a miss re-renders (up to three tries, the last at high quality) and a persistent miss is an incident Mother rebriefs rather than a misspelled shirt in the shop. Treasury's memory tracks sales per style, and Mother sees it at every review. `DESIGN_STYLES` in `.env` restricts the library if you want a narrower shop.
+
 ## Volume, the calendar and orders by email
 
 **The shop calendar** (`constantinople/calendar.py`): Research and Production know what is coming — Halloween, Thanksgiving, Black Friday, Christmas, Valentine's, Mother's/Father's Day, graduation, back-to-school and the rest — how many days are left, and whether a design can still ship in time (POD needs ~12 days). Briefs target the nearest occasion that is not too late, as gifts for a specific person, which is what sells on Etsy.

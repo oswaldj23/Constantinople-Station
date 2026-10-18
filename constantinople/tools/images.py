@@ -28,8 +28,32 @@ def _upscale(path: str) -> str:
     return path
 
 
+def _norm(t: str) -> str:
+    import re
+    return re.sub(r"[^a-z0-9]", "", (t or "").lower())
+
+
+def read_text(path: str) -> str | None:
+    """Ask the model to transcribe every word visible in the design. None when no model key."""
+    if not config.ANTHROPIC_API_KEY: return None
+    try:
+        import anthropic, io
+        from PIL import Image
+        im = Image.open(path).convert("RGBA"); bg = Image.new("RGBA", im.size, (255, 255, 255, 255)); bg.alpha_composite(im); im = bg.convert("RGB"); im.thumbnail((900, 900))
+        buf = io.BytesIO(); im.save(buf, "JPEG", quality=85)
+        c = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+        msg = c.messages.create(model=config.AGENT_MODEL, max_tokens=120, messages=[{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.b64encode(buf.getvalue()).decode()}},
+            {"type": "text", "text": "Transcribe ALL text visible in this image exactly as written, in reading order, on one line. Include misspellings exactly. If there is no text at all reply NONE."}]}])
+        return "".join(getattr(b, "text", "") for b in msg.content).strip()
+    except Exception:
+        return None
+
+
 async def generate(ctx, *, prompt_from: str = "", n: int = 4, size: str = "1024x1024", variants: bool = False, dry_run: bool = True, **_):
     prompt = _lookup(ctx, prompt_from) or "flat hand-drawn illustration"
+    wanted_text = (ctx.get("trend_scan") or {}).get("text") or ((ctx.get("research") or {}).get("brief") or {}).get("text")
+    if isinstance(wanted_text, str) and wanted_text.strip().lower() in ("null", "none", ""): wanted_text = None
     OUT.mkdir(parents=True, exist_ok=True)
     files = []
     if dry_run or config.IMAGE_PROVIDER == "none":
@@ -44,19 +68,36 @@ async def generate(ctx, *, prompt_from: str = "", n: int = 4, size: str = "1024x
                 "summary": f"{n} variants rendered"}
     # Real provider. Example for an OpenAI-compatible images endpoint; swap for your provider.
     import httpx
-    base = prompt + " Isolated artwork for printing on a shirt: transparent background, no mockup, no shirt, no frame, no text unless asked."
+    text_rule = (f' The design contains the exact words "{wanted_text}" — spelled exactly, every letter correct, nothing else written anywhere.' if wanted_text
+                 else " No text, letters or numbers anywhere.")
+    base = prompt + " Isolated artwork for printing: transparent background, no mockup, no shirt, no frame, no person." + text_rule
     jobs = [("light", base + " " + VARIANTS["light"]), ("dark", base + " " + VARIANTS["dark"])] if variants else [(f"v{i}", base) for i in range(n)]
-    labelled = {}
+    labelled = {}; qa = {}; spent = 0
     async with httpx.AsyncClient(timeout=180) as c:
         for label, ptxt in jobs:
-            r = await c.post("https://api.openai.com/v1/images/generations", headers={"Authorization": f"Bearer {config.IMAGE_API_KEY}"},
-                             json={"model": "gpt-image-1", "prompt": ptxt, "n": 1, "size": size, "quality": "medium", "background": "transparent", "output_format": "png"})
-            if r.status_code >= 400:
-                return {"summary": "render failed", "incident": f"Image provider error · {r.status_code} {r.text[:140]}", "cost": config.IMAGE_COST_USD * len(labelled)}
-            p = OUT / f"{ctx['run_id']}_{label}.png"; p.write_bytes(base64.b64decode(r.json()["data"][0]["b64_json"]))
+            ok = False
+            for attempt in range(3 if wanted_text else 1):
+                r = await c.post("https://api.openai.com/v1/images/generations", headers={"Authorization": f"Bearer {config.IMAGE_API_KEY}"},
+                                 json={"model": "gpt-image-1", "prompt": ptxt + (" Simpler lettering, larger letters, fewer decorations." if attempt else ""), "n": 1, "size": size, "quality": "medium" if attempt < 2 else "high", "background": "transparent", "output_format": "png"})
+                spent += 1
+                if r.status_code >= 400:
+                    return {"summary": "render failed", "incident": f"Image provider error · {r.status_code} {r.text[:140]}", "cost": config.IMAGE_COST_USD * spent}
+                p = OUT / f"{ctx['run_id']}_{label}.png"; p.write_bytes(base64.b64decode(r.json()["data"][0]["b64_json"]))
+                if wanted_text:
+                    got = read_text(str(p))
+                    if got is None or _norm(got) == _norm(wanted_text):
+                        qa[label] = f"text OK ({got or 'unchecked'})"; ok = True; break
+                    qa[label] = f"attempt {attempt+1}: read back '{got}' ≠ '{wanted_text}'"
+                else:
+                    got = read_text(str(p))
+                    if got and got.strip().upper() != "NONE": qa[label] = f"unexpected text '{got[:40]}'"
+                    else: qa[label] = "no text, as intended"; ok = True
+                    break
+            if wanted_text and not ok:
+                return {"summary": "lettering failed", "incident": f"Design lettering failed QA after 3 renders · wanted '{wanted_text}' · {qa.get(label)} · concept rebriefed", "cost": config.IMAGE_COST_USD * spent}
             _upscale(str(p)); files.append(str(p)); labelled[label] = str(p)
-    return {"files": files, "by_variant": labelled, "prompt": prompt, "cost": config.IMAGE_COST_USD * len(files),
-            "summary": f"{len(files)} print-ready design(s) rendered" + (" · light + dark shirt versions" if variants else "")}
+    return {"files": files, "by_variant": labelled, "prompt": prompt, "text": wanted_text, "qa": qa, "cost": config.IMAGE_COST_USD * spent,
+            "summary": f"{len(files)} print-ready design(s) rendered" + (" · light + dark shirt versions" if variants else "") + (f" · lettering verified: \"{wanted_text}\"" if wanted_text else "") + (f" · {spent - len(files)} re-render(s)" if spent > len(files) else "")}
 
 def _lookup(ctx, path):
     cur = ctx

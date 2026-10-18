@@ -50,6 +50,6 @@ def listing_performance(L, stale_days: int = 30, winner_sales: int = 3) -> list[
         age = max(0, (now - datetime.fromisoformat(a["ts"].replace("Z", "+00:00"))).days)
         p = json.loads(a["payload"] or "{}")
         flag = "winner" if hit["n"] >= winner_sales else ("stale" if age >= stale_days and hit["n"] == 0 else "")
-        out.append({"title": title, "concept": concept, "sales": hit["n"], "revenue": round(hit["rev"], 2), "age_days": age, "flag": flag,
+        out.append({"title": title, "concept": concept, "style": (p.get("trend_scan") or {}).get("style") or ((p.get("research") or {}).get("brief") or {}).get("style") or "botanical", "sales": hit["n"], "revenue": round(hit["rev"], 2), "age_days": age, "flag": flag,
                     "product_id": (p.get("mockup_build") or {}).get("product_id"), "price": (p.get("listing_draft") or {}).get("price")})
     return out
