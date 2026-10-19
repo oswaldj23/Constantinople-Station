@@ -63,3 +63,24 @@ async def listing_stats(ctx, *, dry_run: bool = True, **_):
         stats = [{"listing_id": x["listing_id"], "title": x.get("title", ""), "views": x.get("views", 0), "favorites": x.get("num_favorers", 0), "quantity": x.get("quantity", 0)} for x in r.json().get("results", [])]
     ctx["_ledger"].kv_set("etsy_stats", json.dumps(stats))
     return {"stats": stats, "cost": 0.0, "summary": f"{len(stats)} active listing(s) · {sum(s['views'] for s in stats)} views · {sum(s['favorites'] for s in stats)} favourites"}
+
+
+async def create_digital_listing(ctx, *, title: str, description: str, tags: list, price: float, files: list, image: str, **_) -> dict:
+    """Create a digital-download listing: draft listing → upload image → upload file(s) → activate.
+    Needs the listings_w scope (re-run etsy-auth once after the key is approved)."""
+    import httpx
+    if not (config.ETSY_API_KEY and config.ETSY_SHOP_ID): return {"error": "etsy not linked"}
+    h = _headers(); base = f"https://openapi.etsy.com/v3/application/shops/{config.ETSY_SHOP_ID}"
+    async with httpx.AsyncClient(timeout=120, headers=h) as c:
+        r = await c.post(f"{base}/listings", data={"quantity": 999, "title": title[:140], "description": description[:5000], "price": price, "who_made": "i_did", "when_made": "2020_2025", "taxonomy_id": 2078,
+                                                   "type": "download", "is_digital": "true", "state": "draft", "tags": ",".join(t[:20] for t in tags[:13]), "should_auto_renew": "true"})
+        if r.status_code >= 400: return {"error": f"{r.status_code} {r.text[:160]}"}
+        lid = r.json()["listing_id"]
+        with open(image, "rb") as fh:
+            ri = await c.post(f"{base}/listings/{lid}/images", files={"image": ("mockup.jpg", fh, "image/jpeg")})
+        for f in files:
+            with open(f, "rb") as fh:
+                rf = await c.post(f"{base}/listings/{lid}/files", data={"name": "pack.zip"}, files={"file": ("pack.zip", fh, "application/zip")})
+                if rf.status_code >= 400: return {"error": f"file upload {rf.status_code} {rf.text[:120]}", "listing_id": lid}
+        ra = await c.patch(f"{base}/listings/{lid}", data={"state": "active"})
+        return {"listing_id": lid, "url": f"https://www.etsy.com/listing/{lid}", "activated": ra.status_code < 400}

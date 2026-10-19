@@ -1,0 +1,15 @@
+id: digital
+name: DIGITAL GOODS
+display_as: etsy
+agents: [FORGE, MINT]
+cadence_seconds: 86400         # one pack a day: wall-art sets and colouring packs
+artifact: digital
+complete_msg: "Digital pack ready: {title}"
+steps:
+  - {id: digital_brief,   name: Pack brief,    kind: agent, agent: FORGE, prompt: digital_brief.md}
+  - {id: render,          name: Render set,    kind: tool,  tool: digital.render, agent: FORGE,
+     gate: approve_spend, gate_summary: "Digital Goods wants to render \"{title}\" (3–8 images ≈ $0.25–0.65)", est_cost: 0.5}
+  - {id: package,         name: Package,       kind: tool,  tool: digital.package, agent: FORGE}
+  - {id: digital_listing, name: Listing copy,  kind: agent, agent: MINT, prompt: digital_listing.md}
+  - {id: mother_review,   name: Mother's review, kind: agent, agent: MOTHER, prompt: digital_review.md, verdict_from: verdict}
+  - {id: publish,         name: Publish,       kind: tool,  tool: digital.publish, agent: MINT, emit: publish, transfer_to: launch}

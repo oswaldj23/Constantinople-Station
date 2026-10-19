@@ -128,13 +128,14 @@ def check() -> dict:
 
 async def upload(ctx, *, dry_run: bool = True, privacy: str = "public", **_):
     """Resumable upload of the rendered short with title/description/tags from the script. Dry run records a pretend URL."""
-    r = ctx.get("render") or {}; sc = ctx.get("script") or {}
+    r = ctx.get("render") or ctx.get("compile") or {}; sc = ctx.get("script") or (ctx.get("compile") or {}).get("script") or {}
     if not r.get("file"): return {"summary": "nothing to upload", "cost": 0.0}
+    longform = sc.get("format") == "longform"
     title = (sc.get("title") or "New from the Forge")[:95]
-    if "#shorts" not in title.lower(): title = (title[:87] + " #Shorts")
+    if not longform and "#shorts" not in title.lower(): title = (title[:87] + " #Shorts")
     credit = (ctx.get("background") or {}).get("credit") or r.get("credit")
     origin = "Retold in our own words from a story shared online; names and details changed." if sc.get("source") else "Original story, written and narrated for this channel."
-    desc = (sc.get("caption") or "") + "\n\n" + " ".join("#" + h.strip("#") for h in sc.get("hashtags", [])) + (f"\n\nBackground gameplay: {credit}" if credit else "") + f"\n\n{origin} Made by " + config.STATION_NAME + "."
+    desc = (sc.get("caption") or "") + "\n\n" + " ".join("#" + h.strip("#") for h in sc.get("hashtags", [])) + (f"\n\nBackground gameplay: {credit}" if credit else "") + ("" if longform else f"\n\n{origin}") + " Made by " + config.STATION_NAME + "."
     if dry_run or not _creds()[2]:
         return {"url": f"https://youtube.com/shorts/dryrun_{ctx['run_id'][-6:]}", "video_id": None, "cost": 0.0, "summary": f"upload skipped ({'dry run' if dry_run else 'YouTube not linked'}) · file kept at {Path(r['file']).name}"}
     tok = access_token()

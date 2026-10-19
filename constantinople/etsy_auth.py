@@ -10,7 +10,7 @@ from . import config
 AUTH = "https://www.etsy.com/oauth/connect"
 TOKEN = "https://api.etsy.com/v3/public/oauth/token"
 REDIRECT = "http://localhost:3003/oauth/redirect"
-SCOPES = "transactions_r shops_r listings_r email_r"
+SCOPES = "transactions_r shops_r listings_r listings_w email_r"
 
 
 def env_set(**kv):

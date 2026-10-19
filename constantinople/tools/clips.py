@@ -248,18 +248,19 @@ def _footage_segment(dur: float, out: Path, exclude: str | None = None) -> str |
     return src.name
 
 
-def _procedural_bg(style: str, dur: float, out: Path):
+def _procedural_bg(style: str, dur: float, out: Path, size: tuple = (W, H)):
     """Station-made motion backgrounds we own outright: a slow fractal dive for dark stories, a drifting
     colour field for warm ones, a cool version for facts. ~1x realtime to render."""
+    sw, sh = size; small = f"{sw//4}x{sh//4}"; half = f"{sw//2}x{sh//2}"
     if style == "dark":
-        src = "mandelbrot=size=540x960:rate=30:maxiter=160:start_scale=3:end_scale=0.05:end_pts=800:inner=convergence:outer=normalized_iteration_count"
-        vf = f"scale={W}:{H}:flags=lanczos,hue=H=t*0.12:s=0.55,eq=contrast=1.05:brightness=-0.22:gamma=0.85"
+        src = f"mandelbrot=size={half}:rate=30:maxiter=160:start_scale=3:end_scale=0.05:end_pts=800:inner=convergence:outer=normalized_iteration_count"
+        vf = f"scale={sw}:{sh}:flags=lanczos,hue=H=t*0.12:s=0.55,eq=contrast=1.05:brightness=-0.22:gamma=0.85"
     elif style == "cool":
-        src = "gradients=size=270x480:rate=30:speed=0.015:nb_colors=4:c0=#061a2b:c1=#0b3d4f:c2=#1f8c45:c3=#12233b:type=spiral"
-        vf = f"scale={W}:{H}:flags=bicubic,gblur=sigma=30,hue=H=t*0.1,noise=alls=5:allf=t,eq=brightness=-0.08"
+        src = f"gradients=size={small}:rate=30:speed=0.015:nb_colors=4:c0=#061a2b:c1=#0b3d4f:c2=#1f8c45:c3=#12233b:type=spiral"
+        vf = f"scale={sw}:{sh}:flags=bicubic,gblur=sigma=30,hue=H=t*0.1,noise=alls=5:allf=t,eq=brightness=-0.08"
     else:
-        src = "gradients=size=270x480:rate=30:speed=0.015:nb_colors=5:c0=#120f2b:c1=#3a1c71:c2=#b8336a:c3=#ff7a59:c4=#0b3d4f:type=spiral"
-        vf = f"scale={W}:{H}:flags=bicubic,gblur=sigma=30,hue=H=t*0.15,noise=alls=6:allf=t,eq=brightness=-0.1:saturation=1.1"
+        src = f"gradients=size={small}:rate=30:speed=0.015:nb_colors=5:c0=#120f2b:c1=#3a1c71:c2=#b8336a:c3=#ff7a59:c4=#0b3d4f:type=spiral"
+        vf = f"scale={sw}:{sh}:flags=bicubic,gblur=sigma=30,hue=H=t*0.15,noise=alls=6:allf=t,eq=brightness=-0.1:saturation=1.1"
     _ffmpeg("-f", "lavfi", "-i", src, "-t", f"{dur:.2f}", "-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", str(out), timeout=900)
 
 
@@ -415,3 +416,100 @@ def latest_assets_from_listing(L) -> dict:
     if not arts: return {}
     p = arts[0]["payload"]; mb = p.get("mockup_build") or {}; dd = p.get("design_draft") or {}; ld = p.get("listing_draft") or {}
     return {"title": arts[0]["title"], "mockups": mb.get("mockups") or [], "designs": dd.get("files") or [], "description": ld.get("description", ""), "price": ld.get("price"), "concept": (p.get("trend_scan") or {}).get("concept")}
+
+
+# ── long-form: a weekly compilation of recent story shorts, 16:9, with chapters ─────────────────────
+LW, LH = 1920, 1080
+
+
+def _ass_wide(words, duration, path: Path, text_fallback: str, title: str, accent: str):
+    """Captions for the 16:9 compilation: smaller, lower third; the story's hook as a card for its first 4 s."""
+    def ts(t): h = int(t // 3600); m = int(t % 3600 // 60); s = t % 60; return f"{h}:{m:02d}:{s:05.2f}"
+    head = f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: {LW}
+PlayResY: {LH}
+WrapStyle: 2
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Cap,DejaVu Sans,54,&H00FFFFFF,{accent},&H00000000,&H96000000,-1,0,0,0,100,100,1,0,1,5,2,2,200,200,110,1
+Style: Title,DejaVu Sans,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&HA0000000,-1,0,0,0,100,100,0,0,3,16,0,5,200,200,0,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+    head += f"Dialogue: 1,{ts(0)},{ts(min(4.0, duration))},Title,,0,0,0,,{{\\fad(150,300)}}{title}\n"
+    if words:
+        chunk = []; lines = []
+        for w in words:
+            chunk.append(w)
+            if len(chunk) >= 5 or w["w"].strip().endswith((".", "!", "?", ",")) or sum(len(x["w"]) for x in chunk) > 34:
+                lines.append(chunk); chunk = []
+        if chunk: lines.append(chunk)
+        for ch in lines:
+            s0, e0 = ch[0]["s"], ch[-1]["e"] + 0.08
+            parts = [f"{{\\kf{max(1, int((w['e'] - w['s']) * 100))}}}{w['w'].strip()}" for w in ch]
+            head += f"Dialogue: 0,{ts(s0)},{ts(e0)},Cap,,0,0,0,,{' '.join(parts)}\n"
+    else:
+        ws = text_fallback.split(); n = max(1, len(ws) // 5); per = duration / n
+        for i in range(n):
+            head += f"Dialogue: 0,{ts(i*per)},{ts((i+1)*per)},Cap,,0,0,0,,{' '.join(ws[i*5:(i+1)*5])}\n"
+    path.write_text(head, encoding="utf-8")
+
+
+async def render_longform(ctx, *, count: int = 8, min_count: int = 6, dry_run: bool = True, **_):
+    """Stitch the newest `count` story shorts into one 16:9 video: each story re-laid over a wide background
+    slice with its own title card and captions, one second of black between stories, chapter timestamps for
+    the description. Skips (quietly) until there are `min_count` stories not yet used in a compilation."""
+    if not _have_ffmpeg(): return {"summary": "ffmpeg missing", "incident": INSTALL_HINT, "cost": 0.0}
+    L = ctx.get("_ledger")
+    used = set((L.kv_get("longform_used") or "").split(",")) if L is not None else set()
+    stories = []
+    for a in (L.artifacts(kind_filter="clip", limit=60) if L is not None else []):
+        p = a["payload"]; sc = p.get("script") or {}; vo = p.get("voiceover") or {}
+        if sc.get("format") in (None, "product", "order") or not vo.get("file") or not Path(vo["file"]).exists(): continue
+        if a.get("run_id") in used: continue
+        stories.append({"run_id": a.get("run_id"), "title": a["title"], "hook": sc.get("hook_card") or a["title"], "format": sc.get("format"), "voice": vo["file"], "words": vo.get("words"), "text": sc.get("voiceover", ""), "duration": float(vo.get("duration") or 30)})
+        if len(stories) >= count: break
+    if len(stories) < min_count:
+        return {"skip": True, "cost": 0.0, "summary": f"{len(stories)} new stories banked · compiling at {min_count}"}
+    stories.reverse()   # oldest first, so part numbers read in order
+    d = OUT / ctx["run_id"]; d.mkdir(parents=True, exist_ok=True)
+    fmt_major = max(set(s["format"] for s in stories), key=[s["format"] for s in stories].count)
+    F = FORMATS.get(fmt_major, FORMATS["story"])
+    segs = []; chapters = []; t_cursor = 0.0
+    try:
+        for i, st in enumerate(stories):
+            dur = st["duration"] + 0.5; bg = d / f"bg_{i}.mp4"
+            src_footage = None
+            if FOOTAGE_DIR.exists():
+                files = [p for p in FOOTAGE_DIR.iterdir() if p.suffix.lower() in (".mp4", ".mov", ".mkv", ".webm")]
+                if files:
+                    src_footage = random.choice(files); total = _ffprobe_duration(src_footage); start = random.uniform(1, max(1.1, total - dur - 1))
+                    _ffmpeg("-ss", f"{start:.2f}", "-t", f"{dur:.2f}", "-i", str(src_footage), "-an", "-vf", f"scale={LW}:-2,crop={LW}:{LH},eq=brightness=-0.05,fps={FPS}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", str(bg))
+            if not src_footage:
+                _procedural_bg(F["bg"] if F["bg"] != "scenes" else "warm", dur, bg, size=(LW, LH))
+            ass = d / f"cap_{i}.ass"; _ass_wide(st["words"], st["duration"], ass, st["text"], st["hook"][:70], F["accent"])
+            sub = str(ass).replace("\\", "/").replace(":", "\\:")
+            seg = d / f"seg_{i:02d}.mp4"
+            _ffmpeg("-i", str(bg), "-i", st["voice"], "-filter_complex", f"[0:v]subtitles='{sub}',fade=t=in:st=0:d=0.5,fade=t=out:st={max(0.1, dur-0.6):.2f}:d=0.6[v];[1:a]aformat=sample_rates=48000:channel_layouts=stereo,loudnorm=I=-16:TP=-1.5,apad=pad_dur=0.5[a]",
+                    "-map", "[v]", "-map", "[a]", "-t", f"{dur:.2f}", "-r", str(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", str(seg), timeout=1800)
+            gap = d / f"gap_{i:02d}.mp4"
+            _ffmpeg("-f", "lavfi", "-i", f"color=c=black:s={LW}x{LH}:r={FPS}", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", "1.0", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(gap))
+            chapters.append(f"{int(t_cursor)//60}:{int(t_cursor)%60:02d} {st['hook'][:60]}")
+            t_cursor += dur + 1.0
+            segs += [seg, gap]
+        lst = d / "list.txt"; lst.write_text("".join(f"file '{p}'\n" for p in segs))
+        out = d / "longform.mp4"
+        _ffmpeg("-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", "-movflags", "+faststart", str(out), timeout=600)
+        _ffmpeg("-ss", "2", "-i", str(segs[0]), "-frames:v", "1", "-q:v", "3", str(d / "thumb.jpg"))
+    except Exception as e:
+        return {"summary": "compilation failed", "incident": f"Long-form render failed · {str(e)[:160]}", "cost": 0.0}
+    if L is not None: L.kv_set("longform_used", ",".join(sorted(used | {s["run_id"] for s in stories if s["run_id"]})[-400:]))
+    n = len(stories); label = {"horror": "Scary Stories", "aita": "Am I Wrong? Stories", "revenge": "Revenge Stories", "story": "True Story Time", "facts": "Facts"}.get(fmt_major, "Stories")
+    title = f"{n} {label} to Fall Asleep To" if fmt_major == "horror" else f"{n} {label} in One Sitting"
+    desc = "Original stories, written and narrated for this channel.\n\nChapters:\n" + "\n".join(chapters) + "\n\n" + "#stories #" + fmt_major
+    return {"file": str(out), "thumb": str(d / "thumb.jpg"), "duration": round(t_cursor, 1), "stories": n, "format": fmt_major, "chapters": chapters, "cost": 0.0,
+            "script": {"title": title, "caption": desc, "hashtags": ["#" + fmt_major, "#stories", "#storytime"], "format": "longform"},
+            "summary": f"compiled {n} {fmt_major} stories · {t_cursor/60:.1f} min · chapters ready"}

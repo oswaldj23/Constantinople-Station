@@ -65,6 +65,7 @@ async def run_agent(agent: str, prompt_file: str, ctx: dict, *, dry_run: bool) -
                "assigned_style": (lambda st: __import__("constantinople.styles", fromlist=["describe"]).describe(st))(__import__("constantinople.styles", fromlist=["next_style"]).next_style(ctx["_ledger"])),
                "style_library": __import__("constantinople.styles", fromlist=["library_text"]).library_text(),
                "style_results": __import__("constantinople.styles", fromlist=["style_performance"]).style_performance(ctx["_ledger"]), "our_results": __import__("constantinople.tools.signal", fromlist=["our_results"]).our_results(ctx["_ledger"]), "product_type": __import__("constantinople.tools.printify", fromlist=["next_product"]).next_product(ctx["_ledger"]),
+               "recent_digital": [a["title"] for a in ctx["_ledger"].artifacts(kind_filter="digital", limit=8)] or "none yet",
                "mother": config.MOTHER_NAME, "assigned_format": __import__("constantinople.tools.signal", fromlist=["next_format"]).next_format(ctx["_ledger"]), "recent_clips": [c["title"] for c in __import__("constantinople.tools.signal", fromlist=["recent_clips"]).recent_clips(ctx["_ledger"], 10)] or "none yet",
                "latest_listing": (lambda a: {"title": a[0]["title"], "description": (a[0]["payload"].get("listing_draft") or {}).get("description", "")} if a else "none yet")(ctx["_ledger"].artifacts(kind_filter="listing", limit=1))}
     except Exception:
@@ -104,6 +105,23 @@ def canned(prompt_file: str, ctx: dict) -> dict:
         return {"summary": f"Brief locked: {brief['concept']} ({ctx.get('product_type','tee')} · {brief.get('style','botanical')})", "concept": brief["concept"], "occasion": brief.get("occasion", "none"), "style": brief.get("style", "botanical"), "text": brief.get("text"),
                 "design_prompt": (f"bold lettering design with the exact words \"{brief['text']}\"" if brief.get("text") else f"flat hand-drawn illustration of a {brief['concept'].replace(' tee','').replace(' mug','')}, two-colour, cream and sage, lots of negative space, no text"),
                 "products": [ctx.get("product_type", "tee")]}
+    if "digital_brief" in prompt_file:
+        kind = random.choice(["wall_art_set", "coloring_pages"]); theme = random.choice(["Soft Sage Botanical Trio", "Line Art Faces", "Retro Sunset National Parks", "Cozy Kitchen Herbs", "Little Forest Friends"])
+        n = 8 if kind == "coloring_pages" else 3
+        return {"summary": f"{kind}: {theme}", "kind": kind, "theme": theme, "buyer": "a renter decorating a first apartment", "use": "living room gallery wall" if kind == "wall_art_set" else "kids 4-8, rainy afternoons",
+                "prompts": [f"{theme.lower()}, piece {i+1}, coordinated muted palette, full composition" for i in range(n)]}
+    if "digital_listing" in prompt_file:
+        b = ctx.get("digital_brief") or {}; wall = b.get("kind") != "coloring_pages"
+        return {"summary": "Listing drafted", "title": f"{b.get('theme','Printable Set')} | Printable Wall Art Set of 3 | Digital Download" if wall else f"{b.get('theme','Colouring Pages')} | Printable Coloring Pages Set of 8 | Digital Download",
+                "tags": ["printable wall art", "digital download", "gallery wall set", "boho decor", "instant download"] if wall else ["coloring pages", "printable coloring", "kids activity", "digital download", "rainy day"],
+                "description": "What you get: " + ("3 prints at 8x10, 11x14, 16x20 and A4 as JPG and PDF." if wall else "8 pages as a US Letter PDF and PNGs.") + "\n\nPrint at home or at any print shop; files are 300 dpi.\n\nThis is a digital file; nothing will be shipped. Design created with AI tools from our own original prompts.",
+                "price": 7.95 if wall else 4.95}
+    if "digital_review" in prompt_file:
+        ld = ctx.get("digital_listing") or {}; ok = "nothing will be shipped" in ld.get("description", "").lower() and "ai tools" in ld.get("description", "").lower()
+        return {"summary": "Reviewed", "verdict": "approve" if ok else "reject", "reason": "coherent set, disclosure present" if ok else "missing disclosure"}
+    if "longform_review" in prompt_file:
+        c = ctx.get("compile") or {}; ok = bool(c.get("file")) and (c.get("stories") or 0) >= 6 and 300 <= float(c.get("duration") or 0) <= 1500
+        return {"summary": "Reviewed: post it" if ok else "Reviewed: hold", "verdict": "approve" if ok else "reject", "reason": "stories, length and chapters in order" if ok else "too few stories or wrong length"}
     if "clip_review" in prompt_file:
         r = ctx.get("render") or {}
         ok = bool(r.get("file")) and 10 <= float(r.get("duration") or 0) <= 60

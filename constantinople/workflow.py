@@ -95,6 +95,9 @@ class Runner:
             if result.get("incident"):
                 L.emit(bay.id, "incident", result["incident"], step=i + 1, agent=agent, run_id=run_id)
                 raise Incident(result["incident"])
+            if st.get("stop_if") and result.get(st["stop_if"]):
+                L.emit(bay.id, "poll", f"{st['name']}: {result.get('summary', 'nothing to do')}", step=i + 1, agent=agent, run_id=run_id)
+                L.set_step(bay.id, 0, last_run=run_id); return ctx
             if st.get("verdict_from") and str(result.get(st["verdict_from"], "")).lower() == "reject":
                 L.emit(bay.id, "mother", f"Rejected before publish · {result.get('reason','no reason given')}", step=i + 1, agent=config.MOTHER_NAME, run_id=run_id, action="reject_listing")
                 L.emit(bay.id, "incident", f"Design discarded by {config.MOTHER_NAME} · {result.get('reason','')}", step=i + 1, agent=config.MOTHER_NAME, run_id=run_id)
@@ -187,6 +190,10 @@ def _title(ctx: dict) -> str:
     dr = ctx.get("demand_rank")
     if isinstance(dr, dict) and isinstance(dr.get("brief"), dict) and dr["brief"].get("concept"):
         return dr["brief"]["concept"]
+    if isinstance(ctx.get("digital_listing"), dict) and ctx["digital_listing"].get("title"):
+        return str(ctx["digital_listing"]["title"])[:80]
+    if isinstance(ctx.get("compile"), dict) and isinstance(ctx["compile"].get("script"), dict) and ctx["compile"]["script"].get("title"):
+        return str(ctx["compile"]["script"]["title"])
     if isinstance(ctx.get("brief"), dict) and ctx["brief"].get("picks"):
         return ", ".join(p.get("genre", "") for p in ctx["brief"]["picks"][:3])
     if isinstance(ctx.get("caption"), dict) and ctx["caption"].get("caption"):

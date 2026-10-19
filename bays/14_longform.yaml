@@ -1,0 +1,12 @@
+id: longform
+name: CLIP FORGE · LONG-FORM
+display_as: clips
+agents: [CUT, REEL]
+cadence_seconds: 604800        # one compilation a week (needs 6+ story shorts since the last one)
+artifact: longform
+complete_msg: "Long-form live: {title}"
+steps:
+  - {id: compile, name: Compile stories, kind: tool, tool: clips.render_longform, agent: CUT, stop_if: skip, pause: 0.2}
+  - {id: mother_review, name: Mother's review, kind: agent, agent: MOTHER, prompt: longform_review.md, verdict_from: verdict}
+  - {id: upload,  name: Upload,          kind: tool, tool: youtube.upload, agent: REEL, args: {privacy: public},
+     gate: approve_publish, gate_summary: "Clip Forge wants to post the weekly compilation \"{title}\" to YouTube", emit: publish}

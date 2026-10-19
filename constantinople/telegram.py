@@ -115,6 +115,10 @@ class Telegram:
             text = f"⚠️ <b>{ev.get('bay','').upper()}</b> · {msg}"
         elif k == "reply" and ev.get("draft"):
             text = f"✉️ <b>HERALD drafted a reply</b> — copy it into Etsy:\n\n<code>{ev['draft'][:1500]}</code>"
+        elif k == "publish" and ev.get("bay") == "digital" and ev.get("draft"):
+            text = f"🗂 <b>Digital pack ready to list</b> — the zip is on the server under output/digital/ready/; create a digital listing on Etsy with this copy (2 minutes), or wait for the Etsy API to do it automatically:\n\n<code>{ev['draft'][:1500]}</code>"
+            if ev.get("image"):
+                img = ev["image"]; self._loop.call_soon_threadsafe(lambda: asyncio.create_task(self.send_photo_file(img, "Listing photo")))
         elif k == "publish" and ev.get("bay") == "launch" and ev.get("draft"):
             text = f"📣 <b>Post ready</b> — copy into Instagram / TikTok / Pinterest with the picture:\n\n<code>{ev['draft'][:1500]}</code>"
             if ev.get("image"):
