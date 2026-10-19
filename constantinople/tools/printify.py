@@ -14,8 +14,9 @@ PRODUCTS = {
     "hoodie":     {"titles": ["Unisex Heavy Blend", "Hooded Sweatshirt"], "fallback": 77, "price": {"default": 4495, "2XL": 4795, "3XL": 4995}, "label": "Hoodie", "scale": 0.7, "y": 0.45},
     "mug":        {"titles": ["Ceramic Mug", "11oz"], "fallback": 68, "price": {"default": 1695, "15oz": 1995}, "label": "Mug", "scale": 0.9, "y": 0.5},
     "tote":       {"titles": ["Tote Bag"], "fallback": 1086, "price": {"default": 1995}, "label": "Tote Bag", "scale": 0.8, "y": 0.5},
+    "poster":     {"titles": ["Matte", "Vertical Posters"], "fallback": 282, "price": {"default": 2495, '16" x 20"': 3495, '18" x 24"': 3995, '24" x 36"': 5495}, "label": "Art Print", "scale": 1.0, "y": 0.5},
 }
-ROTATION = [p.strip() for p in (__import__("os").getenv("PRODUCT_ROTATION") or "tee,sweatshirt,mug,tee,tote,hoodie").split(",") if p.strip() in PRODUCTS] or ["tee"]
+ROTATION = [p.strip() for p in (__import__("os").getenv("PRODUCT_ROTATION") or "tee,sweatshirt,mug,poster,tee,tote,hoodie").split(",") if p.strip() in PRODUCTS] or ["tee"]
 PROVIDER_PREF = ["SwiftPOD", "Monster Digital", "Printify Choice", "Print Geek", "Underground Threads", "District Photo", "Dream Junction"]
 LIGHT = {"White", "Natural", "Sand", "Ash", "Ice Grey", "Light Blue", "Light Pink", "Sport Grey", "Oatmeal Heather"}
 DARK = {"Black", "Navy", "Dark Heather", "Charcoal", "Forest Green", "Maroon", "Dark Chocolate"}
@@ -97,8 +98,8 @@ async def create_product(ctx, *, design_from: str = "design_draft.files", produc
         light_id = ids.get("light"); dark_id = ids.get("dark", light_id)
         bp = await _find_blueprint(c, ptype)
         provider, variants = await _pick_provider_and_variants(c, bp)
-        light_v = [v["id"] for v in variants if v.get("options", {}).get("color") not in DARK]
-        dark_v = [v["id"] for v in variants if v.get("options", {}).get("color") in DARK]
+        light_v = [v["id"] for v in variants if v.get("options", {}).get("color") not in DARK or ptype in ("poster", "mug")]
+        dark_v = [v["id"] for v in variants if v.get("options", {}).get("color") in DARK and ptype not in ("poster", "mug")]
         areas = []; place = {"x": 0.5, "y": spec["y"], "scale": spec["scale"], "angle": 0}
         if light_v: areas.append({"variant_ids": light_v, "placeholders": [{"position": "front", "images": [{"id": light_id, **place}]}]})
         if dark_v: areas.append({"variant_ids": dark_v, "placeholders": [{"position": "front", "images": [{"id": dark_id, **place}]}]})

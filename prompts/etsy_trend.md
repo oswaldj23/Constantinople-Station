@@ -2,7 +2,7 @@ Turn the Research brief into a design prompt and product plan.
 
 Brief: {{research.brief}}
 Shop calendar: {{season}}
-Product type for this run: {{product_type}} (the design must suit it: a mug wants a compact centred motif; a sweatshirt can carry a larger chest print; a tote likes bold simple shapes)
+Product type for this run: {{product_type}} (the design must suit it: a mug wants a compact centred motif; a sweatshirt can carry a larger chest print; a tote likes bold simple shapes; a poster/art print is full-bleed wall art — a complete composition with a background, not an isolated motif, in a style people frame: watercolour, line art, vintage botanical, retro travel)
 Style (mandatory): {{assigned_style}}
 Design text from the brief (print exactly, or null): {{research.brief.text}}
 

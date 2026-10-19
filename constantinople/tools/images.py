@@ -70,7 +70,8 @@ async def generate(ctx, *, prompt_from: str = "", n: int = 4, size: str = "1024x
     import httpx
     text_rule = (f' The design contains the exact words "{wanted_text}" — spelled exactly, every letter correct, nothing else written anywhere.' if wanted_text
                  else " No text, letters or numbers anywhere.")
-    base = prompt + " Isolated artwork for printing: transparent background, no mockup, no shirt, no frame, no person." + text_rule
+    poster = (ctx.get("trend_scan") or {}).get("products", [""])[:1] == ["poster"] or ctx.get("product_type") == "poster"
+    base = prompt + (" Full-bleed wall-art composition filling the whole canvas, print-ready, no frame, no mockup, no person, no watermark." if poster else " Isolated artwork for printing: transparent background, no mockup, no shirt, no frame, no person.") + text_rule
     jobs = [("light", base + " " + VARIANTS["light"]), ("dark", base + " " + VARIANTS["dark"])] if variants else [(f"v{i}", base) for i in range(n)]
     labelled = {}; qa = {}; spent = 0
     async with httpx.AsyncClient(timeout=180) as c:
@@ -78,7 +79,7 @@ async def generate(ctx, *, prompt_from: str = "", n: int = 4, size: str = "1024x
             ok = False
             for attempt in range(3 if wanted_text else 1):
                 r = await c.post("https://api.openai.com/v1/images/generations", headers={"Authorization": f"Bearer {config.IMAGE_API_KEY}"},
-                                 json={"model": "gpt-image-1", "prompt": ptxt + (" Simpler lettering, larger letters, fewer decorations." if attempt else ""), "n": 1, "size": size, "quality": "medium" if attempt < 2 else "high", "background": "transparent", "output_format": "png"})
+                                 json={"model": "gpt-image-1", "prompt": ptxt + (" Simpler lettering, larger letters, fewer decorations." if attempt else ""), "n": 1, "size": "1024x1536" if poster else size, "quality": "medium" if attempt < 2 else "high", "background": "opaque" if poster else "transparent", "output_format": "png"})
                 spent += 1
                 if r.status_code >= 400:
                     return {"summary": "render failed", "incident": f"Image provider error · {r.status_code} {r.text[:140]}", "cost": config.IMAGE_COST_USD * spent}
