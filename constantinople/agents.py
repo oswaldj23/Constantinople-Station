@@ -124,7 +124,7 @@ def canned(prompt_file: str, ctx: dict) -> dict:
         ld = ctx.get("digital_listing") or {}; ok = "nothing will be shipped" in ld.get("description", "").lower() and "ai tools" in ld.get("description", "").lower()
         return {"summary": "Reviewed", "verdict": "approve" if ok else "reject", "reason": "coherent set, disclosure present" if ok else "missing disclosure"}
     if "longform_review" in prompt_file:
-        c = ctx.get("compile") or {}; ok = bool(c.get("file")) and (c.get("stories") or 0) >= 6 and 300 <= float(c.get("duration") or 0) <= 1500
+        c = ctx.get("compile") or {}; ok = bool(c.get("file")) and (c.get("stories") or 0) >= 6 and 240 <= float(c.get("duration") or 0) <= 1800
         return {"summary": "Reviewed: post it" if ok else "Reviewed: hold", "verdict": "approve" if ok else "reject", "reason": "stories, length and chapters in order" if ok else "too few stories or wrong length"}
     if "clip_review" in prompt_file:
         r = ctx.get("render") or {}

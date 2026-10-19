@@ -80,6 +80,13 @@ A shop that makes one kind of design reaches one kind of buyer, and most print-o
 
 **Learning from our own channel**: the Signal Deck stores our YouTube video stats and joins them to the Forge's archive (format and hook per upload). Once eight or more shorts have view counts, the format rotation shifts: two picks in three go to the formats our channel's numbers favour, one in three explores the least-tried format; the writer sees the best-performing hooks in its format.
 
+## More fronts: Pin Deck, Digital Goods, Stock Vault, long-form
+
+- **Pin Deck** (`bays/13_pins.yaml`): three times a day, pins a live listing (round-robin) to a Pinterest board the station creates — real mockup, keyword title, two-line description, link to the Etsy listing. Pinterest is the largest free traffic source for Etsy shops. Setup: developers.pinterest.com → create an app (redirect URI `http://localhost:3005/oauth/redirect`, trial access is enough for your own account) → `PINTEREST_APP_ID`/`SECRET` → `python -m constantinople pinterest-auth`.
+- **Digital Goods** (`bays/15_digital.yaml`): one pack a day — a printable wall-art set of three (8x10, 11x14, 16x20, A4 as JPG and PDF) or an eight-page colouring pack (US Letter PDF) — with a framed mockup for the listing photo and the listing copy. Listed on Etsy automatically once the API key is approved (re-run `etsy-auth` so the token carries `listings_w`); until then the zip, mockup and copy land in `output/digital/ready/` and on Telegram for a two-minute manual listing.
+- **Stock Vault** (`bays/16_stock.yaml`): a themed set of eight stock images a day, titled and keyworded, uploaded by SFTP to Adobe Stock with a metadata CSV. Adobe requires the contributor to tick "generative AI" and submit each batch, so the Monday report counts what is waiting; `/stockdone` clears it. Setup: contributor.stock.adobe.com → Upload → Connect via SFTP → `STOCK_SFTP_USER`/`PASSWORD`.
+- **Long-form** (`bays/14_longform.yaml`): weekly, once six or more new story shorts exist, re-lays them as a 16:9 compilation with a title card per story, captions, one second of black between stories and chapter timestamps in the description, and posts it (with your approval). Long videos pay many times a Short's rate and count toward the 4,000 watch-hours route to monetisation.
+
 ## The Clip Forge and the Signal Deck
 
 The Forge makes vertical shorts the way the channels that actually get watched do — **original stories over a moving background with big word-timed captions** — and sells the same thing as a service.
