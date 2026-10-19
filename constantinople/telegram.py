@@ -171,7 +171,7 @@ class Telegram:
     async def command(self, text: str):
         parts = text.split(); cmd = parts[0].lower().lstrip("/"); arg = parts[1] if len(parts) > 1 else None
         if cmd in ("help", "h"):
-            await self.send("<b>Bridge commands</b>\n/status · /approvals · /approve N · /reject N\n/hold BAY · /boost BAY · /run BAY\n/report · /mother · /listings · /clips\n/clip NICHE | BRIEF | CTA  (order a short)\n/quiet · /normal (how much I message you)")
+            await self.send("<b>Bridge commands</b>\n/status · /approvals · /approve N · /reject N\n/hold BAY · /boost BAY · /run BAY\n/report · /mother · /listings · /brief · /clips\n/clip NICHE | BRIEF | CTA  (order a short)\n/quiet · /normal (how much I message you)")
         elif cmd == "status":
             await self.send(self.status_text())
         elif cmd == "approvals":
@@ -205,6 +205,13 @@ class Telegram:
             order = {"niche": parts[0], "brief": parts[1] if len(parts) > 1 else "", "cta": parts[2] if len(parts) > 2 else "Link in bio.", "amount": config.CLIP_PRICE, "order_id": f"TG{int(datetime.now().timestamp())%10**7}"}
             self.L.emit("clips", "order", f"Clip order {order['order_id']}: {order['niche']} short · ${order['amount']:.2f}", agent="REEL")
             await self.orch.runner.enqueue("clip_orders", {"clip_order": order}); await self.send(f"Order {order['order_id']} queued at the Forge. I'll send you the video when it's cut.")
+        elif cmd == "brief":
+            import json as _j
+            try: sh = _j.loads(self.L.kv_get("shared") or "{}")
+            except Exception: sh = {}
+            b = (sh.get("research") or {}).get("brief") or {}
+            if not b: await self.send("No research brief yet. /run research"); return
+            await self.send("<b>Current brief</b>\n" + "\n".join(f"• {k}: {v}" for k, v in b.items() if v not in (None, "", "none")))
         elif cmd == "listings":
             from . import memory
             rows = memory.listing_performance(self.L)[:10]
@@ -226,14 +233,15 @@ class Telegram:
         m = mission.state(self.L)
         lines = [f"☀️ <b>Morning report · {config.STATION_NAME}</b>",
                  f"Last 24h: {d['sales_count']} sale(s) · ${d['revenue']:,.2f} · spend ${d['cost']:,.2f}",
-                 f"Listings made: {d['listings']} · incidents: {d['incidents']} · Mother decisions: {d['mother_actions']}",
+                 f"Listings made: {d['listings']} · live on Etsy: {d['shop']['listings_live_on_etsy']} (oldest {d['shop']['oldest_live_days']}d) · incidents: {d['incidents']} · Mother decisions: {d['mother_actions']}",
+                 ("⚠️ " + d['shop']['verdict']) if d['shop']['listings_live_on_etsy'] == 0 or d['shop']['oldest_live_days'] < 14 else "",
                  f"Mission: leg {m['leg']:02d} · {m['leg_pct']}% to {m['next_waypoint']['name']} · ETA {m['eta_next_days']} sols" if m.get('eta_next_days') else f"Mission: leg {m['leg']:02d} · {m['leg_pct']}% to {m['next_waypoint']['name']}",
                  f"Directive: {m.get('directive') or '—'}"]
         if d["top"]: lines.append("Top: " + "; ".join(f"{t} ({n})" for t, n in d["top"][:3]))
         if d["notes"]: lines.append(f"Mother's note: {d['notes'][-1]}")
         pend = len(self.L.approvals("pending"))
         if pend: lines.append(f"🛎 {pend} approval(s) waiting — /approvals")
-        return "\n".join(lines)
+        return "\n".join(l for l in lines if l)
 
     async def _daily(self):
         while True:

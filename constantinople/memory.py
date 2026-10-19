@@ -10,6 +10,20 @@ def _since(days: int) -> str:
     return (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
 
+def shop_state(L) -> dict:
+    """How open for business the shop actually is: listings published to Etsy (not just drafted), the oldest
+    one's age, and a plain verdict Mother must respect before blaming demand."""
+    pubs = L.db.execute("SELECT ts, msg FROM events WHERE bay='etsy' AND kind='publish' AND (msg LIKE 'Published %' OR msg LIKE 'Listing live %') ORDER BY ts").fetchall()
+    live = len(pubs)
+    oldest = max(0, (datetime.now(timezone.utc) - datetime.fromisoformat(pubs[0]["ts"].replace("Z", "+00:00"))).days) if pubs else 0
+    drafted = L.db.execute("SELECT COUNT(*) c FROM artifacts WHERE kind='listing'").fetchone()["c"]
+    if live == 0: verdict = "NOTHING IS LIVE ON ETSY YET. Zero sales means nothing about demand; the shop is not open. Get listings published first."
+    elif oldest < 14: verdict = f"Shop opened {oldest} day(s) ago. New Etsy listings take 2–4 weeks to earn impressions; zero sales is expected and says nothing about demand yet."
+    elif oldest < 45: verdict = f"Shop open {oldest} days. Judge demand per listing only after 30+ days live; prefer adding listings and occasions over cutting niches."
+    else: verdict = f"Shop open {oldest} days; sales data is meaningful. Lean on winners, retire 45-day zero-sale listings."
+    return {"listings_drafted": drafted, "listings_live_on_etsy": live, "oldest_live_days": oldest, "verdict": verdict}
+
+
 def digest(L, days: int = 7) -> dict:
     since = _since(days)
     rows = L.db.execute("SELECT kind, bay, msg, amount, agent FROM events WHERE ts>=?", (since,)).fetchall()
@@ -23,7 +37,7 @@ def digest(L, days: int = 7) -> dict:
             "listings": sum(1 for r in rows if r["kind"] == "complete" and r["bay"] == "etsy"),
             "incidents": sum(incidents.values()), "incidents_by_bay": dict(incidents),
             "mother_actions": sum(1 for r in rows if r["kind"] == "mother"),
-            "top": titles.most_common(5), "directives": directives[-5:], "notes": notes[-5:]}
+            "top": titles.most_common(5), "directives": directives[-5:], "notes": notes[-5:], "shop": shop_state(L)}
 
 
 def add_note(L, note: str, keep: int = 30):
