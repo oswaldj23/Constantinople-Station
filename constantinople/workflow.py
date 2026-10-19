@@ -190,6 +190,8 @@ def _title(ctx: dict) -> str:
     dr = ctx.get("demand_rank")
     if isinstance(dr, dict) and isinstance(dr.get("brief"), dict) and dr["brief"].get("concept"):
         return dr["brief"]["concept"]
+    if isinstance(ctx.get("stock_brief"), dict) and ctx["stock_brief"].get("theme"):
+        return str(ctx["stock_brief"]["theme"])
     if isinstance(ctx.get("digital_listing"), dict) and ctx["digital_listing"].get("title"):
         return str(ctx["digital_listing"]["title"])[:80]
     if isinstance(ctx.get("compile"), dict) and isinstance(ctx["compile"].get("script"), dict) and ctx["compile"]["script"].get("title"):

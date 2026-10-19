@@ -65,6 +65,7 @@ async def run_agent(agent: str, prompt_file: str, ctx: dict, *, dry_run: bool) -
                "assigned_style": (lambda st: __import__("constantinople.styles", fromlist=["describe"]).describe(st))(__import__("constantinople.styles", fromlist=["next_style"]).next_style(ctx["_ledger"])),
                "style_library": __import__("constantinople.styles", fromlist=["library_text"]).library_text(),
                "style_results": __import__("constantinople.styles", fromlist=["style_performance"]).style_performance(ctx["_ledger"]), "our_results": __import__("constantinople.tools.signal", fromlist=["our_results"]).our_results(ctx["_ledger"]), "product_type": __import__("constantinople.tools.printify", fromlist=["next_product"]).next_product(ctx["_ledger"]),
+               "recent_stock": [a["title"] for a in ctx["_ledger"].artifacts(kind_filter="stock", limit=8)] or "none yet",
                "recent_digital": [a["title"] for a in ctx["_ledger"].artifacts(kind_filter="digital", limit=8)] or "none yet",
                "mother": config.MOTHER_NAME, "assigned_format": __import__("constantinople.tools.signal", fromlist=["next_format"]).next_format(ctx["_ledger"]), "recent_clips": [c["title"] for c in __import__("constantinople.tools.signal", fromlist=["recent_clips"]).recent_clips(ctx["_ledger"], 10)] or "none yet",
                "latest_listing": (lambda a: {"title": a[0]["title"], "description": (a[0]["payload"].get("listing_draft") or {}).get("description", "")} if a else "none yet")(ctx["_ledger"].artifacts(kind_filter="listing", limit=1))}
@@ -105,6 +106,9 @@ def canned(prompt_file: str, ctx: dict) -> dict:
         return {"summary": f"Brief locked: {brief['concept']} ({ctx.get('product_type','tee')} · {brief.get('style','botanical')})", "concept": brief["concept"], "occasion": brief.get("occasion", "none"), "style": brief.get("style", "botanical"), "text": brief.get("text"),
                 "design_prompt": (f"bold lettering design with the exact words \"{brief['text']}\"" if brief.get("text") else f"flat hand-drawn illustration of a {brief['concept'].replace(' tee','').replace(' mug','')}, two-colour, cream and sage, lots of negative space, no text"),
                 "products": [ctx.get("product_type", "tee")]}
+    if "stock_brief" in prompt_file:
+        theme = random.choice(["Soft gradient abstract backgrounds", "Autumn leaves macro textures", "Minimal desk flat-lays with copy space", "Watercolor paper textures"])
+        return {"summary": f"Set: {theme}", "theme": theme, "images": [{"prompt": f"{theme.lower()}, variation {i+1}", "title": f"{theme} {i+1}", "keywords": ["background", "texture", "abstract", "copy space", "minimal", "design", "wallpaper"], "category": 8} for i in range(8)]}
     if "digital_brief" in prompt_file:
         kind = random.choice(["wall_art_set", "coloring_pages"]); theme = random.choice(["Soft Sage Botanical Trio", "Line Art Faces", "Retro Sunset National Parks", "Cozy Kitchen Herbs", "Little Forest Friends"])
         n = 8 if kind == "coloring_pages" else 3

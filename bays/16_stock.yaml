@@ -1,0 +1,12 @@
+id: stock
+name: STOCK VAULT
+display_as: studio
+agents: [LUMEN]
+cadence_seconds: 86400         # one themed set a day (8 images ≈ $1.40)
+artifact: stock
+complete_msg: "Stock set uploaded: {title}"
+steps:
+  - {id: stock_brief, name: Set brief,  kind: agent, agent: LUMEN, prompt: stock_brief.md}
+  - {id: render,      name: Render set, kind: tool,  tool: stock.render, agent: LUMEN,
+     gate: approve_spend, gate_summary: "Stock Vault wants to render \"{title}\" (8 images ≈ $1.40)", est_cost: 1.4}
+  - {id: upload,      name: Upload,     kind: tool,  tool: stock.upload, agent: LUMEN, emit: publish}

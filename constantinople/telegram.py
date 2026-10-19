@@ -216,6 +216,8 @@ class Telegram:
             b = (sh.get("research") or {}).get("brief") or {}
             if not b: await self.send("No research brief yet. /run research"); return
             await self.send("<b>Current brief</b>\n" + "\n".join(f"• {k}: {v}" for k, v in b.items() if v not in (None, "", "none")))
+        elif cmd == "stockdone":
+            self.L.kv_set("stock_pending", "0"); await self.send("Noted — stock queue cleared.")
         elif cmd == "listings":
             from . import memory
             rows = memory.listing_performance(self.L)[:10]
@@ -242,6 +244,10 @@ class Telegram:
                  f"Mission: leg {m['leg']:02d} · {m['leg_pct']}% to {m['next_waypoint']['name']} · ETA {m['eta_next_days']} sols" if m.get('eta_next_days') else f"Mission: leg {m['leg']:02d} · {m['leg_pct']}% to {m['next_waypoint']['name']}",
                  f"Directive: {m.get('directive') or '—'}"]
         if d["top"]: lines.append("Top: " + "; ".join(f"{t} ({n})" for t, n in d["top"][:3]))
+        try:
+            sp = int(self.L.kv_get("stock_pending") or 0)
+            if sp and datetime.now().weekday() == 0: lines.append(f"🗃 {sp} stock image(s) uploaded, waiting for your submit at contributor.stock.adobe.com (select all → tick 'generative AI' → Submit). Reply /stockdone after.")
+        except Exception: pass
         if d["notes"]: lines.append(f"Mother's note: {d['notes'][-1]}")
         pend = len(self.L.approvals("pending"))
         if pend: lines.append(f"🛎 {pend} approval(s) waiting — /approvals")

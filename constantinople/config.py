@@ -60,7 +60,8 @@ CLIP_PRICE     = float(os.getenv("CLIP_PRICE", "35"))          # what one made-t
 LISTINGS_PER_DAY = float(os.getenv("LISTINGS_PER_DAY", "2"))   # Etsy listings a day (each ~$0.20 fee + ~$0.10 images)
 PRODUCT_ROTATION = os.getenv("PRODUCT_ROTATION", "tee,sweatshirt,mug,poster,tee,tote,hoodie")
 DESIGN_STYLES    = os.getenv("DESIGN_STYLES", "")
-PINTEREST_ACCESS_TOKEN = os.getenv("PINTEREST_ACCESS_TOKEN") or None                # comma list to restrict the style library; empty = all
+PINTEREST_ACCESS_TOKEN = os.getenv("PINTEREST_ACCESS_TOKEN") or None
+STOCK_SFTP_USER = os.getenv("STOCK_SFTP_USER") or None                # comma list to restrict the style library; empty = all
 SIGNAL_GENRES  = [g.strip() for g in os.getenv("SIGNAL_GENRES", "scary stories,reddit stories,aita,story time,revenge stories,creepypasta,true scary stories,minecraft parkour,satisfying,facts,history,motivation,cozy aesthetic,ai art,etsy small business,day in the life").split(",") if g.strip()]
 
 def integrations() -> dict:
@@ -73,7 +74,7 @@ def integrations() -> dict:
             "auto_retire": AUTO_RETIRE, "auto_price": AUTO_PRICE,
             "youtube_scan": bool(YOUTUBE_API_KEY), "youtube_upload": bool(YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET and YOUTUBE_REFRESH_TOKEN),
             "tts": bool(IMAGE_API_KEY), "ffmpeg": __import__("shutil").which("ffmpeg") is not None,
-            "listings_per_day": LISTINGS_PER_DAY, "product_rotation": PRODUCT_ROTATION, "pinterest": bool(PINTEREST_ACCESS_TOKEN)}
+            "listings_per_day": LISTINGS_PER_DAY, "product_rotation": PRODUCT_ROTATION, "pinterest": bool(PINTEREST_ACCESS_TOKEN), "stock": bool(STOCK_SFTP_USER and os.getenv("STOCK_SFTP_PASSWORD"))}
 
 # USD per 1M tokens, used to cost every agent step. Adjust to the model you run.
 PRICES = {   # matched by substring of the model name
