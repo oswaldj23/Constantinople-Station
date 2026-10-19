@@ -1,0 +1,10 @@
+id: pins
+name: PIN DECK
+display_as: launch
+agents: [BEACON]
+skip_unless_listings: true
+cadence_seconds: 28800         # three pins a day, round-robin over live listings
+quiet: true
+steps:
+  - {id: pin_caption, name: Pin caption, kind: agent, agent: BEACON, prompt: pin_caption.md}
+  - {id: pin,         name: Pin,         kind: tool,  tool: pinterest.pin, agent: BEACON, emit: publish}

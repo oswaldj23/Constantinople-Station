@@ -9,6 +9,7 @@
   python -m constantinople etsy-auth              one-time Etsy login (stores tokens in .env)
   python -m constantinople youtube-auth           one-time YouTube login so the Clip Forge can post
   python -m constantinople youtube-check          does the stored YouTube login still work?
+  python -m constantinople pinterest-auth         one-time Pinterest login so the Pin Deck can pin listings
   python -m constantinople footage URL            pull a free-to-use gameplay video into footage/ and record its credit
   python -m constantinople clip --niche "coffee shop" --brief "..." --cta "..."   order a short (needs serve running)
 """
@@ -28,7 +29,7 @@ def main(argv=None):
     p = sub.add_parser("approve"); p.add_argument("id", type=int)
     p = sub.add_parser("reject"); p.add_argument("id", type=int)
     sub.add_parser("tail")
-    sub.add_parser("etsy-auth"); sub.add_parser("youtube-auth"); sub.add_parser("youtube-check")
+    sub.add_parser("etsy-auth"); sub.add_parser("youtube-auth"); sub.add_parser("youtube-check"); sub.add_parser("pinterest-auth")
     p = sub.add_parser("footage"); p.add_argument("url"); p.add_argument("--credit", default=None, help="credit line (default: the uploader's channel name)")
     p = sub.add_parser("clip"); p.add_argument("--niche", default="small business"); p.add_argument("--brief", default=""); p.add_argument("--cta", default="Link in bio."); p.add_argument("--amount", type=float, default=config.CLIP_PRICE)
     a = ap.parse_args(argv)
@@ -50,6 +51,8 @@ def main(argv=None):
         with open(d / "CREDITS.txt", "a") as fh: fh.write(f"{fname} | {credit} (YouTube) · {title[:80]}\n")
         print(f"Saved footage/{fname} · credit recorded. The Forge will use it from the next short. Remember: only videos whose uploader allows reuse.")
         return
+    if a.cmd == "pinterest-auth":
+        from .pinterest_auth import main as pa; pa(); return
     if a.cmd == "youtube-check":
         from .tools.youtube import check; r = check()
         print(f"YouTube: OK · channel '{r['channel']}' · {r.get('subscribers')} subscribers · {r.get('videos')} videos" if r["ok"] else f"YouTube: NOT working · {r['error']}"); return

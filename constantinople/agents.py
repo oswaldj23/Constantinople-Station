@@ -191,6 +191,9 @@ def canned(prompt_file: str, ctx: dict) -> dict:
         m = ctx.get("message") or {}
         return {"summary": f"Reply drafted ({m.get('category','question')})", "category": m.get("category", "question"),
                 "reply": "Thanks for reaching out! Yes — that's available in XL, and I've linked the size chart below. Let me know if you'd like me to swap your order.", "needs_human": False}
+    if "pin_caption" in prompt_file:
+        ll = ctx.get("latest_listing"); t = (ll.get("title") if isinstance(ll, dict) else None) or "Made to order gift"
+        return {"summary": "Pin drafted", "title": t.split("|")[0].strip()[:100], "description": "Made to order and shipped in days. A gift that says you noticed."}
     if "caption" in prompt_file:
         return {"summary": "Caption drafted in station voice", "caption": "New in the Production Bay this week. Hand-drawn, made to order, shipped in 3-5 days.", "hashtags": ["#handdrawn", "#smallshop"]}
     return {"summary": "done"}
