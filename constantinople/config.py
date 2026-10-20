@@ -57,7 +57,8 @@ YOUTUBE_CLIENT_SECRET = os.getenv("YOUTUBE_CLIENT_SECRET") or None
 YOUTUBE_REFRESH_TOKEN = os.getenv("YOUTUBE_REFRESH_TOKEN") or None
 YOUTUBE_CHANNEL       = os.getenv("YOUTUBE_CHANNEL") or None   # filled by youtube-auth
 CLIP_PRICE     = float(os.getenv("CLIP_PRICE", "35"))          # what one made-to-order short sells for
-LISTINGS_PER_DAY = float(os.getenv("LISTINGS_PER_DAY", "2"))   # Etsy listings a day (each ~$0.20 fee + ~$0.10 images)
+LISTINGS_PER_DAY = float(os.getenv("LISTINGS_PER_DAY", "2"))
+CLIPS_PER_DAY    = float(os.getenv("CLIPS_PER_DAY", "3"))   # Etsy listings a day (each ~$0.20 fee + ~$0.10 images)
 PRODUCT_ROTATION = os.getenv("PRODUCT_ROTATION", "tee,sweatshirt,mug,poster,tee,tote,hoodie")
 DESIGN_STYLES    = os.getenv("DESIGN_STYLES", "")
 PINTEREST_ACCESS_TOKEN = os.getenv("PINTEREST_ACCESS_TOKEN") or None
@@ -74,7 +75,7 @@ def integrations() -> dict:
             "auto_retire": AUTO_RETIRE, "auto_price": AUTO_PRICE,
             "youtube_scan": bool(YOUTUBE_API_KEY), "youtube_upload": bool(YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET and YOUTUBE_REFRESH_TOKEN),
             "tts": bool(IMAGE_API_KEY), "ffmpeg": __import__("shutil").which("ffmpeg") is not None,
-            "listings_per_day": LISTINGS_PER_DAY, "product_rotation": PRODUCT_ROTATION, "pinterest": bool(PINTEREST_ACCESS_TOKEN), "stock": bool(STOCK_SFTP_USER and os.getenv("STOCK_SFTP_PASSWORD"))}
+            "listings_per_day": LISTINGS_PER_DAY, "clips_per_day": CLIPS_PER_DAY, "product_rotation": PRODUCT_ROTATION, "pinterest": bool(PINTEREST_ACCESS_TOKEN), "stock": bool(STOCK_SFTP_USER and os.getenv("STOCK_SFTP_PASSWORD"))}
 
 # USD per 1M tokens, used to cost every agent step. Adjust to the model you run.
 PRICES = {   # matched by substring of the model name

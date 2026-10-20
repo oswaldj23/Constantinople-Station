@@ -2,7 +2,9 @@ id: clips
 name: CLIP FORGE
 agents: [REEL, VOX, CUT]
 requires: [signal]             # never cut a clip blind; Signal Deck tells it what is being watched
-cadence_seconds: 28800         # three shorts a day (YouTube allows ~6 uploads/day on a new channel)
+cadence_seconds: 28800
+runs_per_day_env: CLIPS_PER_DAY     # .env: shorts a day (default 3; YouTube's API budget allows ~5 alongside the daily scan)
+runs_per_day_default: 3
 artifact: clip
 complete_msg: "Short live: {title}"
 steps:
