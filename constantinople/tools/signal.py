@@ -86,5 +86,6 @@ def recent_clips(L, n: int = 12) -> list:
     for a in L.artifacts(kind_filter="clip", limit=n):
         p = a["payload"]; r = p.get("render") or {}; up = p.get("upload") or {}; sc = p.get("script") or {}
         out.append({"title": a["title"], "ts": a["ts"], "file": r.get("file"), "thumb": r.get("thumb"), "duration": r.get("duration"), "url": up.get("url"),
-                    "genre": sc.get("genre"), "kind": sc.get("kind"), "format": sc.get("format"), "run_id": a.get("run_id")})
+                    "genre": sc.get("genre"), "kind": sc.get("kind"), "format": sc.get("format"), "run_id": a.get("run_id"),
+                    "caption": sc.get("caption") or "", "hashtags": sc.get("hashtags") or []})
     return out

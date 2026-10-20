@@ -106,8 +106,13 @@ class Telegram:
                 from .tools import signal
                 rows = [c for c in signal.recent_clips(self.L, 3) if c.get("run_id") == ev.get("run_id")] or signal.recent_clips(self.L, 1)
                 if rows and rows[0].get("file"):
-                    c0 = rows[0]; cap = f"🎬 {msg}\n{c0.get('url') or ''}\nSave this and post it to TikTok. Caption and hashtags are in the Forge archive.".strip()
-                    self._loop.call_soon_threadsafe(lambda: asyncio.create_task(self.send_video_file(c0["file"], cap)))
+                    c0 = rows[0]; tags = " ".join("#" + h.strip("#") for h in (c0.get("hashtags") or [])[:8])
+                    cap = f"🎬 {msg}\n{c0.get('url') or ''}".strip()
+                    post_text = (c0.get("caption") or c0.get("title") or "") + ("\n" + tags if tags else "")
+                    async def _handoff():
+                        await self.send_video_file(c0["file"], cap)
+                        await self.send(f"📱 <b>TikTok:</b> save the video above, then paste this as the caption:\n\n<code>{post_text[:1000]}</code>")
+                    self._loop.call_soon_threadsafe(lambda: asyncio.create_task(_handoff()))
             except Exception as e:
                 log.warning("clip handoff: %s", e)
             return
