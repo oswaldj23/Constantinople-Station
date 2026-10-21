@@ -9,12 +9,13 @@ API = "https://api.printify.com/v1"
 # Product types the shop rotates through. Blueprints are found in Printify's catalog by title keywords
 # (ids differ by region/time); the `fallback` id is the well-known one. Prices are retail, in cents.
 PRODUCTS = {
-    "tee":        {"titles": ["Unisex Heavy Cotton Tee"], "fallback": 6,  "price": {"default": 2495, "2XL": 2695, "3XL": 2895}, "label": "T-Shirt", "scale": 0.85, "y": 0.4},
-    "sweatshirt": {"titles": ["Unisex Heavy Blend", "Crewneck Sweatshirt"], "fallback": 49, "price": {"default": 3995, "2XL": 4295, "3XL": 4495}, "label": "Sweatshirt", "scale": 0.75, "y": 0.42},
-    "hoodie":     {"titles": ["Unisex Heavy Blend", "Hooded Sweatshirt"], "fallback": 77, "price": {"default": 4495, "2XL": 4795, "3XL": 4995}, "label": "Hoodie", "scale": 0.7, "y": 0.45},
-    "mug":        {"titles": ["Ceramic Mug", "11oz"], "fallback": 68, "price": {"default": 1695, "15oz": 1995}, "label": "Mug", "scale": 0.9, "y": 0.5},
-    "tote":       {"titles": ["Tote Bag"], "fallback": 1086, "price": {"default": 1995}, "label": "Tote Bag", "scale": 0.8, "y": 0.5},
-    "poster":     {"titles": ["Matte", "Vertical Posters"], "fallback": 282, "price": {"default": 2495, '16" x 20"': 3495, '18" x 24"': 3995, '24" x 36"': 5495}, "label": "Art Print", "scale": 1.0, "y": 0.5},
+    # Prices include US shipping (set Etsy's "free shipping guarantee" on): buyers convert on "free shipping" and Etsy ranks it.
+    "tee":        {"titles": ["Unisex Heavy Cotton Tee"], "fallback": 6,  "price": {"default": 2995, "2XL": 3195, "3XL": 3395}, "label": "T-Shirt", "scale": 0.85, "y": 0.4},
+    "sweatshirt": {"titles": ["Unisex Heavy Blend", "Crewneck Sweatshirt"], "fallback": 49, "price": {"default": 4495, "2XL": 4795, "3XL": 4995}, "label": "Sweatshirt", "scale": 0.75, "y": 0.42},
+    "hoodie":     {"titles": ["Unisex Heavy Blend", "Hooded Sweatshirt"], "fallback": 77, "price": {"default": 4995, "2XL": 5295, "3XL": 5495}, "label": "Hoodie", "scale": 0.7, "y": 0.45},
+    "mug":        {"titles": ["Ceramic Mug", "11oz"], "fallback": 68, "price": {"default": 1895, "15oz": 2195}, "label": "Mug", "scale": 0.9, "y": 0.5},
+    "tote":       {"titles": ["Tote Bag"], "fallback": 1086, "price": {"default": 2295}, "label": "Tote Bag", "scale": 0.8, "y": 0.5},
+    "poster":     {"titles": ["Matte", "Vertical Posters"], "fallback": 282, "price": {"default": 2695, '16" x 20"': 3695, '18" x 24"': 4195, '24" x 36"': 5695}, "label": "Art Print", "scale": 1.0, "y": 0.5},
 }
 ROTATION = [p.strip() for p in (__import__("os").getenv("PRODUCT_ROTATION") or "tee,sweatshirt,mug,poster,tee,tote,hoodie").split(",") if p.strip() in PRODUCTS] or ["tee"]
 PROVIDER_PREF = ["SwiftPOD", "Monster Digital", "Printify Choice", "Print Geek", "Underground Threads", "District Photo", "Dream Junction"]

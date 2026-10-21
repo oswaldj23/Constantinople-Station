@@ -1,0 +1,14 @@
+id: press
+name: THE PRESS · KDP BOOKS
+display_as: etsy
+agents: [FORGE, MINT]
+cadence_seconds: 604800        # one upload-ready coloring book a week (40 pages ≈ $1.60 of images)
+artifact: book
+complete_msg: "Book ready: {title}"
+steps:
+  - {id: book_brief,   name: Book brief,   kind: agent, agent: FORGE, prompt: book_brief.md}
+  - {id: render_pages, name: Draw pages,   kind: tool,  tool: press.render_pages, agent: FORGE,
+     gate: approve_spend, gate_summary: "The Press wants to draw \"{title}\" (40 pages ≈ $1.60)", est_cost: 1.6}
+  - {id: build_book,   name: Build book,   kind: tool,  tool: press.build_book, agent: FORGE}
+  - {id: mother_review, name: Mother's review, kind: agent, agent: MOTHER, prompt: book_review.md, verdict_from: verdict}
+  - {id: handoff,      name: To the bridge, kind: tool,  tool: press.handoff, agent: MINT, emit: publish}

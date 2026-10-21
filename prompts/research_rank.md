@@ -3,6 +3,7 @@ Rank demand from this marketplace sample. Rank by week-over-week movement and bu
 Sample ({{market_scan.count}} listings; if zero, rank the categories below from your own knowledge of what sells steadily as gifts):
 {{market_scan.listings}}
 Categories: {{market_scan.categories}}
+Real buyer search phrases (autocomplete — what people actually type; use their exact wording in concepts, titles and tags): {{market_scan.search_phrases}}
 Shop calendar — buyers shop for occasions weeks ahead; a design must be live before they start looking: {{season}}
 Product type this brief will be made as (chosen by rotation): {{product_type}}
 Design style for this listing (assigned by rotation/what sells — mandatory): {{assigned_style}}

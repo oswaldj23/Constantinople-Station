@@ -66,6 +66,7 @@ async def run_agent(agent: str, prompt_file: str, ctx: dict, *, dry_run: bool) -
                "style_library": __import__("constantinople.styles", fromlist=["library_text"]).library_text(),
                "style_results": __import__("constantinople.styles", fromlist=["style_performance"]).style_performance(ctx["_ledger"]), "our_results": __import__("constantinople.tools.signal", fromlist=["our_results"]).our_results(ctx["_ledger"]), "product_type": __import__("constantinople.tools.printify", fromlist=["next_product"]).next_product(ctx["_ledger"]),
                "last_experiment": ctx["_ledger"].kv_get("experiment") or "none yet",
+               "recent_books": [a["title"] for a in ctx["_ledger"].artifacts(kind_filter="book", limit=8)] or "none yet",
                "recent_stock": [a["title"] for a in ctx["_ledger"].artifacts(kind_filter="stock", limit=8)] or "none yet",
                "recent_digital": [a["title"] for a in ctx["_ledger"].artifacts(kind_filter="digital", limit=8)] or "none yet",
                "assigned_visual": ("illustrated" if (random.Random(ctx["_ledger"].db.execute("SELECT COUNT(*) c FROM artifacts WHERE kind='clip'").fetchone()["c"]).random() < float(__import__("os").getenv("ILLUSTRATED_SHARE", "0.4"))) else "gameplay"),
@@ -125,6 +126,15 @@ def canned(prompt_file: str, ctx: dict) -> dict:
     if "digital_review" in prompt_file:
         ld = ctx.get("digital_listing") or {}; ok = "nothing will be shipped" in ld.get("description", "").lower() and "ai tools" in ld.get("description", "").lower()
         return {"summary": "Reviewed", "verdict": "approve" if ok else "reject", "reason": "coherent set, disclosure present" if ok else "missing disclosure"}
+    if "book_brief" in prompt_file:
+        theme = random.choice(["Cozy Cottages & Gardens", "Little Dinosaurs Big Adventures", "Mandala Animals", "Cats Being Cats"])
+        return {"summary": f"Book: {theme}", "title": theme, "subtitle": "40 original coloring pages for relaxing afternoons", "audience": "adults", "line_style": "clean bold outlines, medium detail, no shading",
+                "page_prompts": [f"{theme.lower()}, scene {i+1}" for i in range(40)], "description": "Forty original pages to color, each a complete scene in the same friendly style. Printed single-sided on white paper so markers do not bleed through.",
+                "keywords": ["coloring book for adults", "relaxing coloring", "cozy coloring book", "garden coloring", "stress relief coloring", "gift for her", "cottage coloring pages"],
+                "categories": ["Crafts, Hobbies & Home > Crafts & Hobbies > Coloring Books for Grown-Ups", "Arts & Photography > Drawing > Coloring Books"], "back_blurb": "Forty scenes, one afternoon at a time. Printed one-sided so your markers stay where you put them.", "price": 7.99}
+    if "book_review" in prompt_file:
+        m = ((ctx.get("build_book") or {}).get("meta") or {}); ok = m.get("pages", 0) >= 40 and "AI" in (m.get("ai_disclosure") or "")
+        return {"summary": "Reviewed", "verdict": "approve" if ok else "reject", "reason": "complete, disclosed" if ok else "short or undisclosed"}
     if "shop_audit" in prompt_file:
         f = ctx.get("facts") or {}
         return {"summary": "Audit done", "score": 62, "gaps": [f"{f.get('live_publish_events',0)} listings live — a shop needs 30+ to be found", "Product mix leans on tees; sweatshirts and mugs underrepresented", "No listing yet targets Thanksgiving despite 'design now'"],
