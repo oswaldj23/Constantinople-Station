@@ -34,9 +34,12 @@ W, H, FPS = 1080, 1920, 30
 
 
 def _ffmpeg(*args, timeout=600):
-    r = subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", *args], capture_output=True, text=True, timeout=timeout)
+    r = subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-threads", "2", *args], capture_output=True, text=True, timeout=timeout)
     if r.returncode != 0:
-        raise RuntimeError(r.stderr[-400:])
+        why = (r.stderr or "").strip()[-400:]
+        if r.returncode in (-9, 137) or (not why and r.returncode < 0):
+            why = f"ffmpeg was killed by the system (exit {r.returncode}) — almost certainly out of memory; run update.sh to add swap, or lower the render size"
+        raise RuntimeError(why or f"ffmpeg exit {r.returncode} with no message")
 
 
 INSTALL_HINT = "ffmpeg is not installed on this machine · run: sudo apt-get install -y ffmpeg fonts-dejavu-core · then: sudo systemctl restart constantinople"
