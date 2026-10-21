@@ -4,7 +4,7 @@ script (model) → voiceover (OpenAI TTS) → word timings (Whisper) → scene i
 AI b-roll) → 1080x1920 render with Ken Burns motion, crossfades, karaoke captions, optional music bed,
 loudness-normalised audio (ffmpeg) → thumbnail → package. Dry run writes a short placeholder video so the
 whole chain can be exercised without keys."""
-import base64, json, math, os, random, shutil, subprocess, textwrap
+import asyncio, base64, json, math, os, random, shutil, subprocess, textwrap
 from pathlib import Path
 from .. import config
 
@@ -61,8 +61,25 @@ def _ffprobe_duration(path) -> float:
     return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3)) if m else 0.0
 
 
+_whisper = None
+def _local_words(path: str):
+    """Word timings from faster-whisper if it is installed (pip install faster-whisper); None otherwise."""
+    global _whisper
+    if os.getenv("TRANSCRIBE", "local") != "local": return None
+    try:
+        from faster_whisper import WhisperModel
+    except Exception:
+        return None
+    try:
+        if _whisper is None: _whisper = WhisperModel(os.getenv("WHISPER_MODEL", "small"), device="cpu", compute_type="int8")
+        segs, _ = _whisper.transcribe(path, word_timestamps=True, vad_filter=False)
+        return [{"w": w.word, "s": float(w.start), "e": float(w.end)} for sg in segs for w in (sg.words or [])] or None
+    except Exception:
+        return None
+
+
 # ── 1. voiceover ─────────────────────────────────────────────────────────
-async def voiceover(ctx, *, script_from: str = "script", voice: str = None, dry_run: bool = True, **_):
+async def _voiceover_impl(ctx, *, script_from: str = "script", voice: str = None, dry_run: bool = True, **_):
     if not _have_ffmpeg(): return {"summary": "ffmpeg missing", "incident": INSTALL_HINT, "cost": 0.0}
     sc = ctx.get(script_from) or {}
     text = sc.get("voiceover") or " ".join(b.get("line", "") for b in sc.get("beats", []))
@@ -81,9 +98,10 @@ async def voiceover(ctx, *, script_from: str = "script", voice: str = None, dry_
                                "instructions": F["instructions"]})
         if r.status_code >= 400: return {"summary": "tts failed", "incident": f"Voice provider error · {r.status_code} {r.text[:120]}", "cost": 0.0}
         mp3.write_bytes(r.content)
-        # word timings for captions
-        words = None
+        # word timings for captions: local Whisper on the box when installed (free), else OpenAI
+        words = _local_words(str(mp3))
         try:
+          if words is None:
             with open(mp3, "rb") as fh:
                 t = await c.post("https://api.openai.com/v1/audio/transcriptions", headers={"Authorization": f"Bearer {config.IMAGE_API_KEY}"},
                                  data={"model": "whisper-1", "response_format": "verbose_json", "timestamp_granularities[]": "word"}, files={"file": ("voice.mp3", fh, "audio/mpeg")})
@@ -143,7 +161,7 @@ def _compose_frame(src: str | None, out: Path, title: str | None = None, accent=
     canvas.save(out, "JPEG", quality=90)
 
 
-async def scenes(ctx, *, script_from: str = "script", dry_run: bool = True, **_):
+async def _scenes_impl(ctx, *, script_from: str = "script", dry_run: bool = True, **_):
     """One frame per beat. Sources, in order of preference: the beat's own image, the listing mockups,
     the design files, an AI b-roll still (if images are on), else a typographic card."""
     sc = ctx.get(script_from) or {}; beats = sc.get("beats") or [{"line": sc.get("voiceover", "")}]
@@ -244,10 +262,10 @@ def _footage_segment(dur: float, out: Path, exclude: str | None = None) -> str |
     src = random.choice(files); total = _ffprobe_duration(src)
     if total < dur + 2:
         # too short: loop it
-        _ffmpeg("-stream_loop", "-1", "-i", str(src), "-t", f"{dur:.2f}", "-an", "-vf", f"scale=-2:{H},crop={W}:{H},eq=brightness=-0.04,fps={FPS}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", str(out))
+        _ffmpeg("-stream_loop", "-1", "-i", str(src), "-t", f"{dur:.2f}", "-an", "-vf", f"scale=-2:{H},crop={W}:{H},eq=brightness=-0.04,fps={FPS}", "-c:v", "libx264", "-preset", "fast", "-crf", "20", "-pix_fmt", "yuv420p", str(out))
     else:
         start = random.uniform(1, total - dur - 1)
-        _ffmpeg("-ss", f"{start:.2f}", "-t", f"{dur:.2f}", "-i", str(src), "-an", "-vf", f"scale=-2:{H},crop={W}:{H},eq=brightness=-0.04,fps={FPS}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", str(out))
+        _ffmpeg("-ss", f"{start:.2f}", "-t", f"{dur:.2f}", "-i", str(src), "-an", "-vf", f"scale=-2:{H},crop={W}:{H},eq=brightness=-0.04,fps={FPS}", "-c:v", "libx264", "-preset", "fast", "-crf", "20", "-pix_fmt", "yuv420p", str(out))
     return src.name
 
 
@@ -267,7 +285,7 @@ def _procedural_bg(style: str, dur: float, out: Path, size: tuple = (W, H)):
     _ffmpeg("-f", "lavfi", "-i", src, "-t", f"{dur:.2f}", "-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", str(out), timeout=900)
 
 
-async def background(ctx, *, dry_run: bool = True, **_):
+async def _background_impl(ctx, *, dry_run: bool = True, **_):
     """Pick the moving background for a story short: the Creator's own footage if any is in footage/, else a
     station-generated one. Product shorts use composed scenes instead and skip this."""
     sc = ctx.get("script") or {}; F = fmt_of(sc)
@@ -335,7 +353,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 
 # ── 4. render ────────────────────────────────────────────────────────────
-async def render(ctx, *, dry_run: bool = True, **_):
+async def _render_impl(ctx, *, dry_run: bool = True, **_):
     if not _have_ffmpeg(): return {"summary": "ffmpeg missing", "incident": INSTALL_HINT, "cost": 0.0}
     vo = ctx.get("voiceover") or {}; sc = ctx.get("scenes") or {}; script = ctx.get("script") or {}
     d = OUT / ctx["run_id"]; d.mkdir(parents=True, exist_ok=True); out = d / "short.mp4"
@@ -381,7 +399,7 @@ async def render(ctx, *, dry_run: bool = True, **_):
     else:
         filt.append(f"[{n}:a]aformat=sample_rates=48000:channel_layouts=stereo,loudnorm=I=-16:TP=-1.5,atrim=0:{dur:.2f}[aout]")
     try:
-        _ffmpeg(*inputs, *a_in, "-filter_complex", ";".join(filt), "-map", "[vout]", "-map", "[aout]", "-t", f"{dur:.2f}", "-r", str(FPS), "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", str(out))
+        _ffmpeg(*inputs, *a_in, "-filter_complex", ";".join(filt), "-map", "[vout]", "-map", "[aout]", "-t", f"{dur:.2f}", "-r", str(FPS), "-c:v", "libx264", "-preset", "medium", "-crf", "19", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(out))
         _ffmpeg("-ss", f"{min(1.0, dur/3):.2f}", "-i", str(out), "-frames:v", "1", "-q:v", "3", str(d / "thumb.jpg"))
     except Exception as e:
         return {"summary": "render failed", "incident": f"Render failed · {str(e)[:160]}", "cost": 0.0}
@@ -461,7 +479,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     path.write_text(head, encoding="utf-8")
 
 
-async def render_longform(ctx, *, count: int = 8, min_count: int = 6, dry_run: bool = True, **_):
+async def _render_longform_impl(ctx, *, count: int = 8, min_count: int = 6, dry_run: bool = True, **_):
     """Stitch the newest `count` story shorts into one 16:9 video: each story re-laid over a wide background
     slice with its own title card and captions, one second of black between stories, chapter timestamps for
     the description. Skips (quietly) until there are `min_count` stories not yet used in a compilation."""
@@ -497,7 +515,7 @@ async def render_longform(ctx, *, count: int = 8, min_count: int = 6, dry_run: b
             sub = str(ass).replace("\\", "/").replace(":", "\\:")
             seg = d / f"seg_{i:02d}.mp4"
             _ffmpeg("-i", str(bg), "-i", st["voice"], "-filter_complex", f"[0:v]subtitles='{sub}',fade=t=in:st=0:d=0.5,fade=t=out:st={max(0.1, dur-0.6):.2f}:d=0.6[v];[1:a]aformat=sample_rates=48000:channel_layouts=stereo,loudnorm=I=-16:TP=-1.5,apad=pad_dur=0.5[a]",
-                    "-map", "[v]", "-map", "[a]", "-t", f"{dur:.2f}", "-r", str(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", str(seg), timeout=1800)
+                    "-map", "[v]", "-map", "[a]", "-t", f"{dur:.2f}", "-r", str(FPS), "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", str(seg), timeout=1800)
             gap = d / f"gap_{i:02d}.mp4"
             _ffmpeg("-f", "lavfi", "-i", f"color=c=black:s={LW}x{LH}:r={FPS}", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-t", "1.0", "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(gap))
             chapters.append(f"{int(t_cursor)//60}:{int(t_cursor)%60:02d} {st['hook'][:60]}")
@@ -516,3 +534,17 @@ async def render_longform(ctx, *, count: int = 8, min_count: int = 6, dry_run: b
     return {"file": str(out), "thumb": str(d / "thumb.jpg"), "duration": round(t_cursor, 1), "stories": n, "format": fmt_major, "chapters": chapters, "cost": 0.0,
             "script": {"title": title, "caption": desc, "hashtags": ["#" + fmt_major, "#stories", "#storytime"], "format": "longform"},
             "summary": f"compiled {n} {fmt_major} stories · {t_cursor/60:.1f} min · chapters ready"}
+
+
+# ── off-loop wrappers: ffmpeg and image work must not stall Telegram, the dashboard feed or other bays ──
+def _run_in_thread(coro_fn, ctx, kwargs):
+    def _runner():
+        return asyncio.run(coro_fn(ctx, **kwargs))
+    return asyncio.to_thread(_runner)
+
+
+async def voiceover(ctx, **kwargs):       return await _run_in_thread(_voiceover_impl, ctx, kwargs)
+async def scenes(ctx, **kwargs):          return await _run_in_thread(_scenes_impl, ctx, kwargs)
+async def background(ctx, **kwargs):      return await _run_in_thread(_background_impl, ctx, kwargs)
+async def render(ctx, **kwargs):          return await _run_in_thread(_render_impl, ctx, kwargs)
+async def render_longform(ctx, **kwargs): return await _run_in_thread(_render_longform_impl, ctx, kwargs)
