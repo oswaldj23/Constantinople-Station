@@ -2,6 +2,7 @@ id: stock
 name: STOCK VAULT
 display_as: studio
 agents: [LUMEN]
+standby: true                  # hand uploads until Adobe enables SFTP; wake with /wake stock
 cadence_seconds: 86400         # one themed set a day (8 images ≈ $1.40)
 artifact: stock
 complete_msg: "Stock set uploaded: {title}"

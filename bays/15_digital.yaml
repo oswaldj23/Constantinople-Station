@@ -2,6 +2,7 @@ id: digital
 name: DIGITAL GOODS
 display_as: etsy
 agents: [FORGE, MINT]
+standby: true                  # manual listing until the Etsy API key is approved; wake with /wake digital
 cadence_seconds: 86400         # one pack a day: wall-art sets and colouring packs
 artifact: digital
 complete_msg: "Digital pack ready: {title}"
