@@ -75,6 +75,8 @@ class Telegram:
                 text = f"🚨 <b>MOTHER needs you</b> (#{aid})\n{a.get('summary','').split(':',1)[-1].strip()}"
                 buttons = [[{"text": "👍 Acknowledged", "callback_data": f"approve:{aid}"}]]
                 self._loop.call_soon_threadsafe(lambda: asyncio.create_task(self.send(text, buttons))); return
+            if config.AUTONOMY == "full" and a and a.get("gate") in ("approve_spend", "approve_publish"):
+                return   # Mother decides these herself; you hear only if she can't (cap reached → 'held' below)
             text = f"🛎 <b>Approval #{aid}</b>\n{msg.split(':',1)[1].strip()}"
             buttons = [[{"text": "✅ Approve", "callback_data": f"approve:{aid}"}, {"text": "❌ Reject", "callback_data": f"reject:{aid}"}]]
             try:
@@ -88,6 +90,10 @@ class Telegram:
                     for m in mocks[:2]: await self.send_photo(m, "Mockup")
                 self._loop.call_soon_threadsafe(lambda: asyncio.create_task(_pics()))
             except Exception: pass
+        elif k == "mother" and ev.get("approval") and ev.get("decision") == "held":
+            aid = ev["approval"]
+            text = f"🛎 <b>Needs you</b> (#{aid}) — over today's spend cap, so Mother left it to you:\n{msg}"
+            buttons = [[{"text": "✅ Approve", "callback_data": f"approve:{aid}"}, {"text": "❌ Reject", "callback_data": f"reject:{aid}"}]]
         elif k == "mother" and ev.get("approval") and "ESCALATED" in msg:
             aid = ev["approval"]
             text = f"🚨 <b>MOTHER needs you</b> (#{aid})\n{msg.split(':',1)[-1].strip()}"

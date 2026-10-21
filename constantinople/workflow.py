@@ -88,6 +88,9 @@ class Runner:
             # approval gate before anything that spends or publishes
             if st.get("gate") and not config.AUTO_APPROVE:
                 if resume and st["id"] == resume["step_id"]:
+                    a = self.ledger.approval(resume["approval_id"])
+                    if a and a["status"] == "pending" and self.mother is not None:   # resumed after a restart: Mother decides, as she would have
+                        await self.mother.consider(resume["approval_id"], bay.id, st["gate"], a.get("summary", ""), float(st.get("est_cost", 0.2)))
                     await self._wait_approval(bay, resume["approval_id"], i, run_id)
                 else:
                     await self._gate(bay, st, ctx, i, run_id)
