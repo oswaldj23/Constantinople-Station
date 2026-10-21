@@ -16,13 +16,52 @@ VARIANTS = {"light": "Palette for printing on a WHITE or cream shirt: rich mid-t
 UPSCALE_PX = 4500   # Printify's comfortable print size for a tee front
 
 
+def _clean_alpha(im):
+    """Print prep for a transparent design: remove the faint semi-transparent halo image models leave
+    around edges, drop stray near-invisible pixels, and crop to the artwork with a small margin."""
+    from PIL import Image, ImageFilter
+    import numpy as np
+    a = np.array(im, dtype=np.uint8)
+    alpha = a[:, :, 3].astype(np.float32)
+    # push weak alpha to zero and strong alpha to full: kills the grey fringe without eating anti-aliasing
+    alpha = np.clip((alpha - 40) * (255.0 / (255 - 40)), 0, 255)
+    alpha[alpha < 24] = 0
+    a[:, :, 3] = alpha.astype(np.uint8)
+    # un-premultiply dark fringes: where alpha is partial, pull colour toward the nearest opaque colour
+    out = Image.fromarray(a, "RGBA")
+    bbox = out.getbbox()
+    if bbox:
+        pad = int(0.02 * max(out.width, out.height))
+        out = out.crop((max(0, bbox[0] - pad), max(0, bbox[1] - pad), min(out.width, bbox[2] + pad), min(out.height, bbox[3] + pad)))
+    return out
+
+
 def _upscale(path: str) -> str:
+    """Print-grade upscale: Real-ESRGAN when installed (pip install realesrgan — needs torch), else a careful
+    two-step Lanczos with light sharpening. Then alpha cleanup. Result ~4500 px wide, as Printify likes."""
     try:
-        from PIL import Image
+        from PIL import Image, ImageFilter
         im = Image.open(path).convert("RGBA")
+        try:
+            import numpy as np
+            from realesrgan import RealESRGANer  # type: ignore
+            from basicsr.archs.rrdbnet_arch import RRDBNet  # type: ignore
+            model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
+            up = RealESRGANer(scale=4, model_path="https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth", model=model, tile=400, half=False, device="cpu")
+            rgb = np.array(im.convert("RGB"))[:, :, ::-1]; alpha = im.split()[3]
+            out, _ = up.enhance(rgb, outscale=4)
+            out = Image.fromarray(out[:, :, ::-1]); alpha = alpha.resize(out.size, Image.LANCZOS); out.putalpha(alpha); im = out
+        except Exception:
+            # two-step Lanczos + gentle unsharp mask keeps edges crisp without ringing
+            if im.width < UPSCALE_PX:
+                mid = im.resize((im.width * 2, im.height * 2), Image.LANCZOS)
+                im = mid.resize((UPSCALE_PX, int(mid.height * UPSCALE_PX / mid.width)), Image.LANCZOS)
+                rgb = im.convert("RGB").filter(ImageFilter.UnsharpMask(radius=2, percent=60, threshold=3)); rgb.putalpha(im.split()[3]); im = rgb
+        try: im = _clean_alpha(im)
+        except Exception: pass
         if im.width < UPSCALE_PX:
             im = im.resize((UPSCALE_PX, int(im.height * UPSCALE_PX / im.width)), Image.LANCZOS)
-            im.save(path, "PNG", optimize=True)
+        im.save(path, "PNG", optimize=True)
     except Exception:
         pass
     return path
