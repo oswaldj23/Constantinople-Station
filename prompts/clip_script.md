@@ -17,6 +17,7 @@ Our newest Etsy listing (ONLY for the rare "product" format, never mentioned in 
 {{latest_listing}}
 
 FORMAT FOR THIS SHORT (assigned by the station, mandatory): **{{assigned_format}}**. Do not choose another. Pick the genre from the brief's picks that fits it.
+VISUAL MODE (assigned): **{{assigned_visual}}**. "gameplay" = narration over footage; "illustrated" = one drawn scene per beat. For illustrated: give `character` (one sentence describing the recurring person so every scene matches: age, hair, clothing, one distinctive detail — never a real or famous person), `art_style` (one line, e.g. "moody digital illustration, soft painterly light, muted teal and amber"), and make every beat's `visual` a concrete, drawable moment with that character in it.
 - horror   — a first-person true-feeling scary story. Ordinary setting, one wrong detail, escalate, end on the image that stays with you. No gore, no real names, no real towns.
 - aita     — a first-person dilemma ("AITA for…"): what happened, what I did, why the other side is furious, end asking the viewer to judge.
 - revenge  — a petty-revenge or malicious-compliance story with a clean, satisfying payoff.
@@ -26,7 +27,7 @@ FORMAT FOR THIS SHORT (assigned by the station, mandatory): **{{assigned_format}
 
 Rules that decide whether it gets watched:
 1. First sentence is the hook and it is the whole premise in under 12 words ("I found a second door in my apartment that isn't on the lease."). The on-screen `hook_card` is that hook, shortened to under 60 characters.
-2. Stories run 45–90 seconds (110–220 words). Facts 25–50 s. Product 15–35 s. Count your words.
+2. Stories run 30–55 seconds (75–135 words) — short beats long on a new channel; if the story needs more, that is what part two is for. Facts 25–50 s. Product 15–35 s. Count your words.
 3. Plain spoken English, short sentences, present tense where it fits. No "like and subscribe", no "guys", no hashtags in the narration.
 4. Every story is ORIGINAL — written by you, now. Never retell a post you have seen, never name a subreddit, a real person, brand, show, song or game. Invented first names are fine.
 5. If the story is strong, end part one on a cliffhanger and write `part2` — a second script of the same length that resolves it. The narration of part one ends with exactly: "Part two is on the channel." Part two starts with a one-sentence recap.
@@ -35,6 +36,7 @@ Rules that decide whether it gets watched:
 
 Return JSON:
 {"summary": "<one line>", "format": "horror" | "aita" | "revenge" | "story" | "facts" | "product", "genre": "<genre from the brief>", "source": null | "<seed title retold>",
+ "visual_mode": "gameplay" | "illustrated", "character": "<for illustrated, else null>", "art_style": "<for illustrated, else null>",
  "title": "<YouTube title, under 70 chars, the hook as a question or statement>", "hook_card": "<on-screen card, under 60 chars>",
  "voiceover": "<the full narration as one paragraph>",
  "beats": [{"line": "<a sentence or two>", "visual": "<product only: what is on screen>"}],

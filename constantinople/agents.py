@@ -68,6 +68,7 @@ async def run_agent(agent: str, prompt_file: str, ctx: dict, *, dry_run: bool) -
                "last_experiment": ctx["_ledger"].kv_get("experiment") or "none yet",
                "recent_stock": [a["title"] for a in ctx["_ledger"].artifacts(kind_filter="stock", limit=8)] or "none yet",
                "recent_digital": [a["title"] for a in ctx["_ledger"].artifacts(kind_filter="digital", limit=8)] or "none yet",
+               "assigned_visual": ("illustrated" if (random.Random(ctx["_ledger"].db.execute("SELECT COUNT(*) c FROM artifacts WHERE kind='clip'").fetchone()["c"]).random() < float(__import__("os").getenv("ILLUSTRATED_SHARE", "0.4"))) else "gameplay"),
                "mother": config.MOTHER_NAME, "assigned_format": (ctx.get("script") or {}).get("format") if isinstance(ctx.get("script"), dict) and (ctx.get("script") or {}).get("part_of") else __import__("constantinople.tools.signal", fromlist=["next_format"]).next_format(ctx["_ledger"]), "recent_clips": [c["title"] for c in __import__("constantinople.tools.signal", fromlist=["recent_clips"]).recent_clips(ctx["_ledger"], 10)] or "none yet",
                "latest_listing": (lambda a: {"title": a[0]["title"], "description": (a[0]["payload"].get("listing_draft") or {}).get("description", "")} if a else "none yet")(ctx["_ledger"].artifacts(kind_filter="listing", limit=1))}
     except Exception:
@@ -185,8 +186,10 @@ def canned(prompt_file: str, ctx: dict) -> dict:
             return {"summary": f"Script drafted: {subject}", "format": "product", "kind": "product", "genre": "etsy small business", "title": f"{subject}: three tries to get it right", "hook_card": "THREE TRIES",
                     "voiceover": " ".join(b["line"] for b in beats), "beats": beats, "caption": f"Made to order. {config.STATION_NAME}.", "hashtags": ["#shorts", "#etsy", "#smallbusiness"], "part2": None}
         hook, card, vo, p2 = stories.get(fmt, stories["story"])
-        return {"summary": f"Script drafted ({fmt}): {card}", "format": fmt, "kind": "genre", "genre": g, "title": hook.rstrip(".") , "hook_card": card,
-                "voiceover": vo, "beats": [{"line": vo}], "caption": hook + (" Part 1." if p2 else ""), "hashtags": ["#shorts", "#" + g.replace(" ", ""), "#storytime", "#" + fmt],
+        ill = ctx.get("assigned_visual") == "illustrated"
+        return {"summary": f"Script drafted ({fmt}{', illustrated' if ill else ''}): {card}", "format": fmt, "kind": "genre", "genre": g, "title": hook.rstrip(".") , "hook_card": card,
+                "visual_mode": "illustrated" if ill else "gameplay", "character": ("a woman in her late twenties, dark curly hair tied up, grey hoodie, a small scar on her left eyebrow" if ill else None), "art_style": ("moody digital illustration, soft painterly light, muted teal and amber" if ill else None),
+                "voiceover": vo, "beats": ([{"line": ln.strip(), "visual": ln.strip()} for ln in vo.split(". ") if ln.strip()][:7] if ill else [{"line": vo}]), "caption": hook + (" Part 1." if p2 else ""), "hashtags": ["#shorts", "#" + g.replace(" ", ""), "#storytime", "#" + fmt],
                 "part2": ({"title": hook.rstrip(".") + " · Part 2", "hook_card": "Part 2 · " + card, "voiceover": p2, "caption": hook + " Part 2.", "hashtags": ["#shorts", "#" + fmt, "#part2"]} if p2 else None)}
     if "signal" in prompt_file:
         rows = (ctx.get("shorts_scan") or {}).get("genres") or [{"genre": "cozy aesthetic", "top_views": 1000000, "supply": 100}]

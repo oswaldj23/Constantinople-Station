@@ -132,7 +132,7 @@ async def upload(ctx, *, dry_run: bool = True, privacy: str = "public", **_):
     if not r.get("file"): return {"summary": "nothing to upload", "cost": 0.0}
     longform = sc.get("format") == "longform"
     title = (sc.get("title") or "New from the Forge")[:95]
-    if not longform and "#shorts" not in title.lower(): title = (title[:87] + " #Shorts")
+    title = title.replace("#Shorts", "").replace("#shorts", "").strip()
     credit = (ctx.get("background") or {}).get("credit") or r.get("credit")
     origin = "Retold in our own words from a story shared online; names and details changed." if sc.get("source") else "Original story, written and narrated for this channel."
     desc = (sc.get("caption") or "") + "\n\n" + " ".join("#" + h.strip("#") for h in sc.get("hashtags", [])) + (f"\n\nBackground gameplay: {credit}" if credit else "") + ("" if longform else f"\n\n{origin}") + " Made by " + config.STATION_NAME + "."
@@ -144,7 +144,7 @@ async def upload(ctx, *, dry_run: bool = True, privacy: str = "public", **_):
         hint = "the app's consent screen is in Testing so the login expired after 7 days, or the login was revoked" if "invalid_grant" in why else why
         return {"summary": "youtube login rejected", "incident": f"YouTube login rejected ({hint}) · the clip is saved · fix: on the server run `cd /opt/constantinople && .venv/bin/python -m constantinople youtube-auth`", "cost": 0.0}
     meta = {"snippet": {"title": title, "description": desc[:4900], "tags": [h.strip("#") for h in sc.get("hashtags", [])][:15], "categoryId": "22"},
-            "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False}}
+            "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False, "containsSyntheticMedia": bool(r.get("illustrated") or (ctx.get("scenes") or {}).get("illustrated"))}}
     size = Path(r["file"]).stat().st_size
     async with httpx.AsyncClient(timeout=600) as c:
         init = await c.post("https://www.googleapis.com/upload/youtube/v3/videos", params={"uploadType": "resumable", "part": "snippet,status"},
@@ -222,3 +222,44 @@ async def reply_comments(ctx, *, dry_run: bool = True, **_):
     if L is not None:
         L.kv_set("comments_answered", ",".join(sorted(answered)[-2000:])); L.kv_set(key, str(done_today + posted))
     return {"posted": posted, "cost": 0.0, "summary": f"{posted} repl{'y' if posted==1 else 'ies'} posted · {done_today + posted}/{cap} today"}
+
+
+# ── analytics: retention per video and progress toward monetisation ────────────────────────────────
+ANALYTICS = "https://youtubeanalytics.googleapis.com/v2/reports"
+
+
+async def analytics(ctx, *, dry_run: bool = True, **_):
+    """Per-video retention (average view %) and the channel's progress toward the Partner Program:
+    subscribers (1,000), Shorts views in the last 90 days (10M), public watch-hours in the last 365 days (4,000).
+    Needs the yt-analytics.readonly scope (re-run youtube-auth once). Stored in kv for the Signal Deck and the report."""
+    import json as _j
+    L = ctx.get("_ledger")
+    if dry_run or not _creds()[2]:
+        return {"videos": {}, "progress": {}, "cost": 0.0, "summary": "analytics unavailable (dry run or not linked)"}
+    tok = access_token()
+    if not tok: return {"videos": {}, "progress": {}, "cost": 0.0, "summary": "YouTube not linked"}
+    from datetime import date, timedelta
+    today = date.today(); d90 = today - timedelta(days=90); d365 = today - timedelta(days=365)
+    out = {"videos": {}, "progress": {}}
+    async with httpx.AsyncClient(timeout=30, headers={"Authorization": f"Bearer {tok}"}) as c:
+        r = await c.get(ANALYTICS, params={"ids": "channel==MINE", "startDate": d90.isoformat(), "endDate": today.isoformat(), "metrics": "views,averageViewPercentage,averageViewDuration,likes,subscribersGained", "dimensions": "video", "sort": "-views", "maxResults": 100})
+        if r.status_code == 403 and ("insufficient" in r.text.lower() or "scope" in r.text.lower()):
+            if L is not None and L.kv_get("analytics_scope_warned") != "1":
+                L.kv_set("analytics_scope_warned", "1"); L.emit("signal", "status", "Analytics: the YouTube login predates analytics access · run `python -m constantinople youtube-auth` once to enable retention tracking", agent="DIAL")
+            return {"videos": {}, "progress": {}, "cost": 0.0, "summary": "analytics access not granted yet (re-run youtube-auth once)"}
+        if r.status_code == 200:
+            for row in r.json().get("rows", []):
+                vid, views, avp, avd, likes, subs = row[:6]
+                out["videos"][vid] = {"views": int(views), "avg_view_pct": round(float(avp), 1), "avg_view_sec": round(float(avd), 1), "likes": int(likes), "subs_gained": int(subs)}
+        ch = await c.get(f"{API}/channels", params={"part": "statistics", "mine": "true"})
+        subs = int(((ch.json().get("items") or [{}])[0].get("statistics") or {}).get("subscriberCount", 0)) if ch.status_code == 200 else 0
+        r90 = await c.get(ANALYTICS, params={"ids": "channel==MINE", "startDate": d90.isoformat(), "endDate": today.isoformat(), "metrics": "views,estimatedMinutesWatched"})
+        r365 = await c.get(ANALYTICS, params={"ids": "channel==MINE", "startDate": d365.isoformat(), "endDate": today.isoformat(), "metrics": "estimatedMinutesWatched"})
+        v90 = int((r90.json().get("rows") or [[0, 0]])[0][0]) if r90.status_code == 200 else 0
+        h365 = round(float((r365.json().get("rows") or [[0]])[0][0]) / 60, 1) if r365.status_code == 200 else 0.0
+        out["progress"] = {"subscribers": subs, "subs_target": 1000, "views_90d": v90, "views_target": 10_000_000, "watch_hours_365d": h365, "hours_target": 4000,
+                           "fan_funding_tier": {"subs_target": 500, "views_target": 3_000_000}}
+    if L is not None:
+        L.kv_set("yt_analytics", _j.dumps(out, default=str))
+    p = out["progress"]; avg = (sum(v["avg_view_pct"] for v in out["videos"].values()) / len(out["videos"])) if out["videos"] else 0
+    return {**out, "cost": 0.0, "summary": f"{len(out['videos'])} videos · avg retention {avg:.0f}% · {p.get('subscribers',0)}/1000 subs · {p.get('views_90d',0):,}/10M views (90d) · {p.get('watch_hours_365d',0)}/4000 h"}

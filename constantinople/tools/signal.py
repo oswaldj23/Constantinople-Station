@@ -38,20 +38,33 @@ def our_results(L, channel_stats: dict | None = None) -> dict:
         try: stats = json.loads(L.kv_get("channel_stats") or "{}")
         except Exception: stats = {}
     by_id = {v["id"]: v for v in (stats.get("videos") or []) if v.get("id")}
+    try:
+        an = json.loads(L.kv_get("yt_analytics") or "{}").get("videos") or {}
+        for vid, a in an.items():
+            by_id.setdefault(vid, {"id": vid, "views": a.get("views", 0)})
+            by_id[vid]["avg_view_pct"] = a.get("avg_view_pct"); by_id[vid]["views"] = max(int(by_id[vid].get("views") or 0), int(a.get("views") or 0))
+    except Exception: pass
     rows = []
     for a in L.artifacts(kind_filter="clip", limit=60):
         p = a["payload"]; up = p.get("upload") or {}; sc = p.get("script") or {}
         vid = up.get("video_id") or (up.get("url", "").rsplit("/", 1)[-1] if up.get("url") and "dryrun" not in up.get("url", "") else None)
         if vid and vid in by_id:
-            rows.append({"format": sc.get("format") or sc.get("kind") or "story", "title": a["title"], "hook": sc.get("hook_card") or "", "views": int(by_id[vid].get("views") or 0), "likes": int(by_id[vid].get("likes") or 0)})
-    per = {}
+            rows.append({"format": sc.get("format") or sc.get("kind") or "story", "visual": sc.get("visual_mode") or "gameplay", "title": a["title"], "hook": sc.get("hook_card") or "", "views": int(by_id[vid].get("views") or 0), "likes": int(by_id[vid].get("likes") or 0), "retention": by_id[vid].get("avg_view_pct")})
+    per = {}; vis = {}
     for r in rows:
-        d = per.setdefault(r["format"], {"n": 0, "views": 0, "best": None})
+        d = per.setdefault(r["format"], {"n": 0, "views": 0, "ret": [], "best": None})
         d["n"] += 1; d["views"] += r["views"]
-        if not d["best"] or r["views"] > d["best"]["views"]: d["best"] = {"title": r["title"], "hook": r["hook"], "views": r["views"]}
-    for f, d in per.items(): d["avg_views"] = round(d["views"] / d["n"]) if d["n"] else 0
+        if r.get("retention") is not None: d["ret"].append(float(r["retention"]))
+        if not d["best"] or r["views"] > d["best"]["views"]: d["best"] = {"title": r["title"], "hook": r["hook"], "views": r["views"], "retention": r.get("retention")}
+        v = vis.setdefault(r["visual"], {"n": 0, "views": 0, "ret": []}); v["n"] += 1; v["views"] += r["views"]
+        if r.get("retention") is not None: v["ret"].append(float(r["retention"]))
+    for f, d in per.items():
+        d["avg_views"] = round(d["views"] / d["n"]) if d["n"] else 0
+        d["avg_retention"] = round(sum(d["ret"]) / len(d["ret"]), 1) if d["ret"] else None; d.pop("ret", None)
+    for k, v in vis.items():
+        v["avg_views"] = round(v["views"] / v["n"]) if v["n"] else 0; v["avg_retention"] = round(sum(v["ret"]) / len(v["ret"]), 1) if v["ret"] else None; v.pop("ret", None)
     top = sorted(rows, key=lambda r: -r["views"])[:5]
-    return {"videos_with_stats": len(rows), "per_format": per, "top": top}
+    return {"videos_with_stats": len(rows), "per_format": per, "per_visual": vis, "top": top, "note": "retention (avg % watched) is the primary signal; views second"}
 
 
 def next_format(L) -> str:
@@ -71,7 +84,8 @@ def next_format(L) -> str:
         if n % 3 == 2:   # explore: the format we have tried least
             tried = {f: res["per_format"].get(f, {}).get("n", 0) for f in STORY_FORMATS}
             return min(tried, key=tried.get)
-        weights = [max(1.0, res["per_format"].get(f, {}).get("avg_views", 0)) for f in STORY_FORMATS]
+        # weight by retention when we have it (the signal that predicts growth), else by views
+        weights = [max(1.0, (res["per_format"].get(f, {}).get("avg_retention") or 0) * 100 or res["per_format"].get(f, {}).get("avg_views", 0)) for f in STORY_FORMATS]
         return rnd.choices(STORY_FORMATS, weights=weights, k=1)[0]
     return ROTATION[n % len(ROTATION)]
 

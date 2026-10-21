@@ -276,6 +276,15 @@ class Telegram:
                 f"🧭 Leg {m['leg']:02d}/{m['legs']} · {m['leg_pct']}% to {m['next_waypoint']['name']} · {m['velocity_per_day']:,.2f}/sol\n"
                 f"🛎 {pend} waiting on you · ⏸ held: {', '.join(held) or 'none'} · {'DRY RUN' if config.DRY_RUN else 'LIVE'} · autonomy {config.AUTONOMY}")
 
+    def _ypp_line(self) -> str:
+        try:
+            p = (json.loads(self.L.kv_get("yt_analytics") or "{}").get("progress") or {})
+            if not p: return ""
+            return (f"📺 Partner Program: {p['subscribers']}/1,000 subs · {p['views_90d']:,}/10M Shorts views (90d) · {p['watch_hours_365d']}/4,000 h"
+                    + (" · fan-funding tier reached" if p["subscribers"] >= 500 and p["views_90d"] >= 3_000_000 else ""))
+        except Exception:
+            return ""
+
     def report_text(self) -> str:
         from . import memory
         d = memory.digest(self.L, days=1)
@@ -286,6 +295,7 @@ class Telegram:
                  ("⚠️ " + d['shop']['verdict']) if d['shop']['listings_live_on_etsy'] == 0 or d['shop']['oldest_live_days'] < 14 else "",
                  f"Mission: leg {m['leg']:02d} · {m['leg_pct']}% to {m['next_waypoint']['name']} · ETA {m['eta_next_days']} sols" if m.get('eta_next_days') else f"Mission: leg {m['leg']:02d} · {m['leg_pct']}% to {m['next_waypoint']['name']}",
                  f"Directive: {m.get('directive') or '—'}",
+                 self._ypp_line(),
                  __import__("constantinople.housekeeping", fromlist=["health"]).health()]
         if d["top"]: lines.append("Top: " + "; ".join(f"{t} ({n})" for t, n in d["top"][:3]))
         try:

@@ -14,13 +14,13 @@ FOOTAGE_DIR = config.ROOT / "footage"        # drop YOUR OWN recorded gameplay /
 
 # What kind of short this is decides the voice, the pacing, the length window and the background.
 FORMATS = {
-    "horror":  {"voice": "ash",   "speed": 0.97, "len": (45, 90),  "bg": "dark",   "accent": "&H005E4FFF",
+    "horror":  {"voice": "ash",   "speed": 0.97, "len": (30, 55),  "bg": "dark",   "accent": "&H005E4FFF",
                 "instructions": "Low, calm, unsettling narrator telling a true-feeling scary story. Slow down at the reveal. Breathy pauses. Never shout."},
-    "aita":    {"voice": "nova",  "speed": 1.06, "len": (45, 90),  "bg": "warm",   "accent": "&H0073FF3D",
+    "aita":    {"voice": "nova",  "speed": 1.06, "len": (30, 55),  "bg": "warm",   "accent": "&H0073FF3D",
                 "instructions": "Conversational, slightly exasperated, like reading a confession out loud to a friend. Natural rhythm, light emphasis on the twist."},
-    "revenge": {"voice": "echo",  "speed": 1.04, "len": (45, 90),  "bg": "warm",   "accent": "&H004DD2FF",
+    "revenge": {"voice": "echo",  "speed": 1.04, "len": (30, 55),  "bg": "warm",   "accent": "&H004DD2FF",
                 "instructions": "Dry, confident storyteller with a smirk. Build to the payoff, land it flat."},
-    "story":   {"voice": "coral", "speed": 1.04, "len": (40, 80),  "bg": "warm",   "accent": "&H00F0D945",
+    "story":   {"voice": "coral", "speed": 1.04, "len": (30, 50),  "bg": "warm",   "accent": "&H00F0D945",
                 "instructions": "Warm, candid story-time voice. Curious, a little amused, present tense energy."},
     "facts":   {"voice": "onyx",  "speed": 1.08, "len": (25, 50),  "bg": "cool",   "accent": "&H0073FF3D",
                 "instructions": "Crisp documentary narrator. Short sentences, confident, no filler."},
@@ -117,7 +117,7 @@ async def _voiceover_impl(ctx, *, script_from: str = "script", voice: str = None
 PALETTES = [((24, 32, 48), (8, 10, 14)), ((48, 30, 20), (12, 8, 6)), ((20, 44, 36), (6, 12, 10)), ((44, 22, 40), (10, 6, 12)), ((40, 40, 24), (10, 10, 6))]
 
 
-def _compose_frame(src: str | None, out: Path, title: str | None = None, accent=(61, 255, 115), fallback_text: str | None = None, seed: int = 0):
+def _compose_frame(src: str | None, out: Path, title: str | None = None, accent=(61, 255, 115), fallback_text: str | None = None, seed: int = 0, full_bleed: bool = False):
     """1080x1920 frame: blurred fill of the image behind, the image itself centred, soft vignette, optional title band.
     With no image: a deep gradient with soft orbs and the spoken line as a large typographic card, so a clip
     never goes out black."""
@@ -141,7 +141,11 @@ def _compose_frame(src: str | None, out: Path, title: str | None = None, accent=
             for ln in lines:
                 bbox = d.textbbox((0, 0), ln, font=font); tw = bbox[2] - bbox[0]
                 d.text(((W - tw) // 2 + 3, y + 3), ln, font=font, fill=(0, 0, 0)); d.text(((W - tw) // 2, y), ln, font=font, fill=(236, 240, 244)); y += 96
-    if src and Path(src).exists():
+    if src and Path(src).exists() and full_bleed:
+        im = Image.open(src).convert("RGB"); s_ = max(W / im.width, H / im.height)
+        im = im.resize((int(im.width * s_) + 1, int(im.height * s_) + 1), Image.LANCZOS); x = (im.width - W) // 2; y = (im.height - H) // 2
+        canvas = im.crop((x, y, x + W, y + H))
+    elif src and Path(src).exists():
         im = Image.open(src).convert("RGBA")
         bg = im.convert("RGB").resize((W, H)).filter(ImageFilter.GaussianBlur(40)); bg = Image.eval(bg, lambda v: int(v * 0.55)); canvas.paste(bg, (0, 0))
         scale = min((W - 160) / im.width, (H * 0.56) / im.height); fg = im.resize((int(im.width * scale), int(im.height * scale)), Image.LANCZOS)
@@ -163,10 +167,29 @@ def _compose_frame(src: str | None, out: Path, title: str | None = None, accent=
     canvas.save(out, "JPEG", quality=90)
 
 
+def _illustrated(sc: dict) -> bool:
+    return (sc or {}).get("visual_mode") == "illustrated" and fmt_of(sc)["bg"] != "scenes"
+
+
 async def _scenes_impl(ctx, *, script_from: str = "script", dry_run: bool = True, **_):
-    """One frame per beat. Sources, in order of preference: the beat's own image, the listing mockups,
-    the design files, an AI b-roll still (if images are on), else a typographic card."""
+    """One frame per beat. Product shorts: the beat's own image, the listing mockups, the design files, an AI
+    b-roll still, else a typographic card. Illustrated story shorts: one AI still per beat in a consistent
+    style with a consistent character (the script's `character` line), QA'd, with camera motion at render."""
     sc = ctx.get(script_from) or {}; beats = sc.get("beats") or [{"line": sc.get("voiceover", "")}]
+    if _illustrated(sc):
+        d = OUT / ctx["run_id"]; d.mkdir(parents=True, exist_ok=True)
+        style = sc.get("art_style") or "moody digital illustration, soft painterly light, muted palette, cinematic framing"
+        char = sc.get("character") or ""
+        frames = []; cost = 0.0; made = 0
+        for i, b in enumerate(beats[:8]):
+            visual = b.get("visual") or b.get("line") or sc.get("title", "")
+            out = d / f"scene_{i:02d}.jpg"; src = None
+            if not dry_run and config.IMAGE_API_KEY and config.IMAGE_PROVIDER != "none":
+                src = _broll(f"{visual}. {('Recurring character: ' + char + '. ') if char else ''}Style: {style}. Vertical 9:16 composition, same style and character as the other scenes in this story.", d / f"ill_{i}.png", allow_people=True)
+                if src: made += 1; cost += 0.04
+            _compose_frame(src, out, title=None, fallback_text=None if src else b.get("line"), seed=i + len(ctx["run_id"]), full_bleed=True)
+            frames.append(str(out))
+        return {"frames": frames, "illustrated": True, "cost": round(cost, 2), "summary": f"illustrated · {made}/{len(frames)} scenes drawn" + (" (placeholders)" if not made else "")}
     if fmt_of(sc)["bg"] != "scenes":
         return {"frames": [], "cost": 0.0, "summary": "story format · background video instead of scenes"}
     d = OUT / ctx["run_id"]; d.mkdir(parents=True, exist_ok=True)
@@ -206,7 +229,7 @@ async def _scenes_impl(ctx, *, script_from: str = "script", dry_run: bool = True
 BROLL_RULES = " Photorealistic vertical photograph, soft natural light, one single scene. Absolutely no text, letters, numbers, logos, signs, labels or packaging with writing. No people, no faces, no hands, no mannequins or robots. Not a collage or grid."
 
 
-def _inspect(path: str) -> tuple[bool, str]:
+def _inspect(path: str, allow_people: bool = False) -> tuple[bool, str]:
     """Ask the model to look at a generated still before we use it: any text, faces, collages or distortions → reject.
     Returns (ok, reason). Without a model key, accept."""
     if not config.ANTHROPIC_API_KEY: return True, "no model key"
@@ -218,23 +241,28 @@ def _inspect(path: str) -> tuple[bool, str]:
         c = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
         msg = c.messages.create(model=config.AGENT_MODEL, max_tokens=120, messages=[{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.b64encode(buf.getvalue()).decode()}},
-            {"type": "text", "text": "You are quality control for a video still. Reject if it contains ANY text/letters/words (even blurry), any human face or body, mannequins/robots, a grid or collage of several images, or obviously distorted/melted objects. Reply with exactly one line: OK, or REJECT: <reason>."}]}])
+            {"type": "text", "text": ("You are quality control for an illustrated story frame. Reject if it contains ANY text/letters/words (even blurry), a grid or collage, extra limbs or fingers, melted or distorted faces, or anything that looks like a known cartoon/game/brand character. Reply with exactly one line: OK, or REJECT: <reason>." if allow_people else
+                                      "You are quality control for a video still. Reject if it contains ANY text/letters/words (even blurry), any human face or body, mannequins/robots, a grid or collage of several images, or obviously distorted/melted objects. Reply with exactly one line: OK, or REJECT: <reason>.")}]}])
         t = "".join(getattr(b, "text", "") for b in msg.content).strip()
         return (t.upper().startswith("OK"), t[:120])
     except Exception as e:
         return True, f"qa skipped ({type(e).__name__})"
 
 
-def _broll(visual: str, out: Path) -> str | None:
+ILLUSTRATED_RULES = " No text, letters, captions, logos or watermarks anywhere. Not a collage. Hands and faces drawn cleanly or kept out of frame."
+
+
+def _broll(visual: str, out: Path, allow_people: bool = False) -> str | None:
     """Generate one AI still for a scene, QA it, retry once with a stricter prompt, else give up (None)."""
     import httpx
-    for attempt, prompt in enumerate((visual + BROLL_RULES, "Simple, calm close-up still life: " + visual + BROLL_RULES + " Minimal, few objects, plain background.")):
+    rules = ILLUSTRATED_RULES if allow_people else BROLL_RULES
+    for attempt, prompt in enumerate((visual + rules, ("Same scene, simpler composition, fewer elements: " if allow_people else "Simple, calm close-up still life: ") + visual + rules)):
         try:
             r = httpx.post("https://api.openai.com/v1/images/generations", headers={"Authorization": f"Bearer {config.IMAGE_API_KEY}"},
                            json={"model": "gpt-image-1", "prompt": prompt, "n": 1, "size": "1024x1536", "quality": "medium"}, timeout=180)
             if r.status_code != 200: return None
             out.write_bytes(base64.b64decode(r.json()["data"][0]["b64_json"]))
-            ok, why = _inspect(str(out))
+            ok, why = _inspect(str(out), allow_people=allow_people)
             if ok: return str(out)
         except Exception:
             return None
@@ -246,18 +274,46 @@ def _broll(visual: str, out: Path) -> str | None:
 # ── 2b. background video (story formats) ────────────────────────────────
 def footage_credit(name: str) -> str | None:
     """footage/CREDITS.txt holds one line per file: `filename | credit line`. The credit is shown on the end
-    card and in the upload description, as the footage channels ask."""
+    card and in the upload description, as the footage channels ask. `name` may be several files joined by ' + '."""
+    wanted = [x.strip() for x in (name or "").split("+")]; found = []
     try:
         for line in (FOOTAGE_DIR / "CREDITS.txt").read_text().splitlines():
             if "|" in line:
                 f, cr = [x.strip() for x in line.split("|", 1)]
-                if f == name and cr: return cr
+                if f in wanted and cr and cr not in found: found.append(cr)
     except Exception: pass
-    return None
+    return " · ".join(found) if found else None
+
+
+SLICE_SECONDS = 7.0   # a visible change every ~7 s keeps thumbs still (pattern interrupt)
 
 
 def _footage_segment(dur: float, out: Path, exclude: str | None = None) -> str | None:
-    """A random slice of the Creator's own footage, cropped to 9:16. Returns the source name or None."""
+    """Background from the Creator's footage: several ~7 s slices from random points (and random files),
+    alternating a slight zoom, cut together — rather than one static slice. Returns the source name(s) or None."""
+    if not FOOTAGE_DIR.exists(): return None
+    files = [p for p in FOOTAGE_DIR.iterdir() if p.suffix.lower() in (".mp4", ".mov", ".mkv", ".webm")]
+    if not files: return None
+    n = max(1, int(round(dur / SLICE_SECONDS))); per = dur / n
+    parts = []; names = []
+    tmpdir = out.parent / "bgparts"; tmpdir.mkdir(exist_ok=True)
+    for i in range(n):
+        src = random.choice(files); total = _ffprobe_duration(src)
+        start = random.uniform(1, max(1.1, total - per - 1)) if total > per + 2 else 0
+        zoom = 1.0 if i % 2 == 0 else 1.07
+        vf = f"scale=-2:{int(H*zoom)},crop={W}:{H},eq=brightness=-0.04,fps={FPS}" if zoom > 1 else f"scale=-2:{H},crop={W}:{H},eq=brightness=-0.04,fps={FPS}"
+        part = tmpdir / f"p{i:02d}.mp4"
+        loop = ["-stream_loop", "-1"] if total < per + 2 else []
+        _ffmpeg(*loop, "-ss", f"{start:.2f}", "-t", f"{per:.2f}", "-i", str(src), "-an", "-vf", vf, "-c:v", "libx264", "-preset", "fast", "-crf", "20", "-pix_fmt", "yuv420p", str(part))
+        parts.append(part); names.append(src.name)
+    lst = tmpdir / "list.txt"; lst.write_text("".join(f"file '{p}'\n" for p in parts))
+    _ffmpeg("-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(out))
+    shutil.rmtree(tmpdir, ignore_errors=True)
+    return " + ".join(sorted(set(names)))
+
+
+def _footage_segment_single(dur: float, out: Path) -> str | None:
+    """(kept for the long-form path) one slice, no cuts."""
     if not FOOTAGE_DIR.exists(): return None
     files = [p for p in FOOTAGE_DIR.iterdir() if p.suffix.lower() in (".mp4", ".mov", ".mkv", ".webm")]
     if not files: return None
@@ -292,6 +348,7 @@ async def _background_impl(ctx, *, dry_run: bool = True, **_):
     station-generated one. Product shorts use composed scenes instead and skip this."""
     sc = ctx.get("script") or {}; F = fmt_of(sc)
     if F["bg"] == "scenes": return {"file": None, "cost": 0.0, "summary": "product format · composed scenes"}
+    if _illustrated(sc): return {"file": None, "cost": 0.0, "summary": "illustrated short · drawn scenes instead of footage"}
     if not _have_ffmpeg(): return {"summary": "ffmpeg missing", "incident": INSTALL_HINT, "cost": 0.0}
     vo = ctx.get("voiceover") or {}; dur = float(vo.get("duration") or 30) + 0.6
     d = OUT / ctx["run_id"]; d.mkdir(parents=True, exist_ok=True); out = d / "bg.mp4"
@@ -304,6 +361,19 @@ async def _background_impl(ctx, *, dry_run: bool = True, **_):
         return {"file": str(out), "source": f"generated:{F['bg']}", "cost": 0.0, "summary": f"background: station-generated ({F['bg']}) · drop your own gameplay in footage/ to use it instead"}
     except Exception as e:
         return {"summary": "background failed", "incident": f"Background render failed · {str(e)[:160]}", "cost": 0.0}
+
+
+def _ambient_bed(style: str, dur: float, out: Path) -> str:
+    """A quiet synthesized bed we own: slow detuned drones with a gentle tremolo. Dark = low minor drone,
+    warm = soft major pad, cool = airy fifth. Mixed under the voice at low level with ducking."""
+    if style == "dark":
+        expr = "0.18*sin(2*PI*55*t)+0.12*sin(2*PI*82.4*t+0.3)+0.08*sin(2*PI*110.3*t)+0.05*sin(2*PI*164.8*t)"
+    elif style == "cool":
+        expr = "0.14*sin(2*PI*110*t)+0.10*sin(2*PI*165*t)+0.06*sin(2*PI*220.5*t)+0.04*sin(2*PI*330*t)"
+    else:
+        expr = "0.14*sin(2*PI*130.8*t)+0.11*sin(2*PI*164.8*t)+0.08*sin(2*PI*196*t)+0.05*sin(2*PI*261.6*t+0.2)"
+    _ffmpeg("-f", "lavfi", "-i", f"aevalsrc='{expr}':s=48000:d={dur+1:.2f}", "-af", "tremolo=f=0.15:d=0.35,lowpass=f=900,afade=t=in:st=0:d=2,afade=t=out:st={max(0.1,dur-2):.2f}:d=2", "-c:a", "libmp3lame", "-q:a", "5", str(out))
+    return str(out)
 
 
 # ── 3. captions ──────────────────────────────────────────────────────────
@@ -362,7 +432,9 @@ async def _render_impl(ctx, *, dry_run: bool = True, **_):
     frames = sc.get("frames") or []; dur = float(vo.get("duration") or 15)
     F = fmt_of(script); bg = (ctx.get("background") or {}).get("file")
     story = F["bg"] != "scenes"
-    if story and not bg:
+    if _illustrated(script) and frames:
+        bg = None   # illustrated: Ken Burns over the drawn scenes, story-style captions and title card
+    elif story and not bg:
         # no background step ran (or it failed quietly): make one now rather than falling back to a black card
         try: _procedural_bg(F["bg"], dur + 0.6, d / "bg.mp4"); bg = str(d / "bg.mp4")
         except Exception: bg = None
@@ -395,6 +467,9 @@ async def _render_impl(ctx, *, dry_run: bool = True, **_):
     if MUSIC_DIR.exists():
         tracks = [p for p in MUSIC_DIR.glob("*.mp3")]
         if tracks: music = str(random.choice(tracks))
+    if not music and story:
+        try: music = _ambient_bed(F["bg"], dur, d / "bed.mp3")
+        except Exception: music = None
     if music:
         a_in += ["-stream_loop", "-1", "-i", music]
         filt.append(f"[{n}:a]aformat=sample_rates=48000:channel_layouts=stereo,loudnorm=I=-16:TP=-1.5[vo];[{n+1}:a]aformat=sample_rates=48000:channel_layouts=stereo,volume=0.18,atrim=0:{dur:.2f}[mu];[vo][mu]sidechaincompress=threshold=0.05:ratio=6:attack=20:release=300[duck];[duck]atrim=0:{dur:.2f}[aout]")
@@ -406,7 +481,7 @@ async def _render_impl(ctx, *, dry_run: bool = True, **_):
     except Exception as e:
         return {"summary": "render failed", "incident": f"Render failed · {str(e)[:160]}", "cost": 0.0}
     size = out.stat().st_size / 1e6
-    return {"file": str(out), "thumb": str(d / "thumb.jpg"), "duration": dur, "size_mb": round(size, 1), "credit": credit, "format": script.get("format") or ("product" if script.get("kind") == "product" else "story"), "cost": 0.0,
+    return {"file": str(out), "thumb": str(d / "thumb.jpg"), "duration": dur, "size_mb": round(size, 1), "credit": credit, "illustrated": _illustrated(script), "format": script.get("format") or ("product" if script.get("kind") == "product" else "story"), "cost": 0.0,
             "summary": f"rendered {dur:.0f}s · {'background video' if bg else str(n) + ' scenes'} · captions {'word-timed' if vo.get('words') else 'estimated'} · {size:.1f} MB"}
 
 

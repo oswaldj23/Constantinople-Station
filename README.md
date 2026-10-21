@@ -98,6 +98,10 @@ A shop that makes one kind of design reaches one kind of buyer, and most print-o
 - **Stock Vault** (`bays/16_stock.yaml`): a themed set of eight stock images a day, titled and keyworded, uploaded by SFTP to Adobe Stock with a metadata CSV. Adobe requires the contributor to tick "generative AI" and submit each batch, so the Monday report counts what is waiting; `/stockdone` clears it. Setup: contributor.stock.adobe.com → Upload → Connect via SFTP → `STOCK_SFTP_USER`/`PASSWORD`.
 - **Long-form** (`bays/14_longform.yaml`): weekly, once six or more new story shorts exist, re-lays them as a 16:9 compilation with a title card per story, captions, one second of black between stories and chapter timestamps in the description, and posts it (with your approval). Long videos pay many times a Short's rate and count toward the 4,000 watch-hours route to monetisation.
 
+## What the shorts playbook changed
+
+After studying the current faceless-shorts playbook: stories run **30–55 s** (short beats long on a new channel; part two carries the rest); the background is cut from several ~7 s slices with alternating zoom (a visible change every few seconds); a quiet synthesized ambient bed (ours) sits under the voice; titles are clean hooks (no "#Shorts" suffix). About 40% of story shorts (`ILLUSTRATED_SHARE`) are **illustrated** — one AI-drawn scene per beat with a consistent character and art style, camera motion, same captions — which varies the channel's look and is flagged as synthetic media on upload. The Signal Deck pulls **retention** (average % watched) from the YouTube Analytics API and learns from it first, views second; the morning report shows progress toward the Partner Program (1,000 subs · 10M Shorts views/90d · 4,000 watch-hours). Comment and analytics access need the login refreshed once: `python -m constantinople youtube-auth`.
+
 ## The Clip Forge and the Signal Deck
 
 The Forge makes vertical shorts the way the channels that actually get watched do — **original stories over a moving background with big word-timed captions** — and sells the same thing as a service.
