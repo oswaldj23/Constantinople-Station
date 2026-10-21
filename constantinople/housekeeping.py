@@ -42,6 +42,31 @@ def tidy(L=None) -> dict:
     return {"removed": removed, "freed_gb": round(freed / 1e9, 2), "free_gb": round(shutil.disk_usage(str(config.ROOT)).free / 1e9, 1)}
 
 
+def backup(L=None) -> dict:
+    """Nightly: copy the ledger (sqlite backup API, consistent) and the small design/listing files into
+    backups/YYYY-MM-DD/, keep the last 7. Never includes .env."""
+    import sqlite3
+    from datetime import date
+    bdir = config.ROOT / "backups"; bdir.mkdir(exist_ok=True)
+    today = bdir / date.today().isoformat(); today.mkdir(exist_ok=True)
+    try:
+        src = sqlite3.connect(config.DB_PATH); dst = sqlite3.connect(str(today / "constantinople.db")); src.backup(dst); dst.close(); src.close()
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:120]}
+    for sub in ("images",):
+        d = OUT / sub
+        if d.exists():
+            tgt = today / sub; tgt.mkdir(exist_ok=True)
+            for f in d.iterdir():
+                if f.is_file() and f.stat().st_size < 30_000_000 and not (tgt / f.name).exists():
+                    try: shutil.copy2(f, tgt / f.name)
+                    except Exception: pass
+    for old in sorted(p for p in bdir.iterdir() if p.is_dir())[:-7]:
+        shutil.rmtree(old, ignore_errors=True)
+    size = sum(f.stat().st_size for f in today.rglob("*") if f.is_file()) / 1e6
+    return {"ok": True, "folder": str(today), "size_mb": round(size, 1)}
+
+
 def health() -> str:
     free_gb = shutil.disk_usage(str(config.ROOT)).free / 1e9
     mem = {}

@@ -186,7 +186,7 @@ class Telegram:
     async def command(self, text: str):
         parts = text.split(); cmd = parts[0].lower().lstrip("/"); arg = parts[1] if len(parts) > 1 else None
         if cmd in ("help", "h"):
-            await self.send("<b>Bridge commands</b>\n/status · /approvals · /approve N · /reject N\n/hold BAY · /boost BAY · /run BAY\n/report · /mother · /listings · /brief · /clips\n/clip NICHE | BRIEF | CTA  (order a short)\n/stockzip · /stockdone (Adobe Stock hand-upload bundle)\n/quiet · /normal (how much I message you)")
+            await self.send("<b>Bridge commands</b>\n/status · /approvals · /approve N · /reject N\n/hold BAY · /boost BAY · /run BAY\n/report · /mother · /listings · /brief · /clips\n/clip NICHE | BRIEF | CTA  (order a short)\n/backup (ledger to your phone) · /stockzip · /stockdone\n/quiet · /normal (how much I message you)")
         elif cmd == "status":
             await self.send(self.status_text())
         elif cmd == "approvals":
@@ -227,6 +227,17 @@ class Telegram:
             b = (sh.get("research") or {}).get("brief") or {}
             if not b: await self.send("No research brief yet. /run research"); return
             await self.send("<b>Current brief</b>\n" + "\n".join(f"• {k}: {v}" for k, v in b.items() if v not in (None, "", "none")))
+        elif cmd == "backup":
+            from . import housekeeping
+            r = housekeeping.backup(self.L)
+            if not r.get("ok"): await self.send(f"Backup failed: {r.get('error')}"); return
+            await self.send(f"💾 Backup written on the server ({r['size_mb']} MB, 7 kept). Sending you the ledger file…")
+            async def _doc():
+                try:
+                    async with httpx.AsyncClient(timeout=300) as c:
+                        with open(r["folder"] + "/constantinople.db", "rb") as fh: await c.post(f"{self.api}/sendDocument", data={"chat_id": self.chat, "caption": "Station ledger · keep somewhere safe"}, files={"document": ("constantinople.db", fh, "application/octet-stream")})
+                except Exception as e: log.warning("backup send: %s", e)
+            asyncio.create_task(_doc())
         elif cmd == "stockzip":
             from .tools import stock
             b = stock.weekly_bundle(self.L)

@@ -122,6 +122,10 @@ class Orchestrator:
             if n % 120 == 0:  # hourly housekeeping: clear render intermediates, watch the disk
                 try:
                     from . import housekeeping; housekeeping.tidy(self.ledger)
+                    from datetime import datetime as _dt
+                    if _dt.utcnow().hour == 7 and self.ledger.kv_get("backup_day") != _dt.utcnow().strftime("%Y-%m-%d"):   # ~03:00 New York
+                        r = housekeeping.backup(self.ledger); self.ledger.kv_set("backup_day", _dt.utcnow().strftime("%Y-%m-%d"))
+                        self.ledger.emit("core", "poll", f"Nightly backup {'ok' if r.get('ok') else 'FAILED'} · {r.get('size_mb', 0)} MB", agent=config.MOTHER_NAME, quiet=True)
                 except Exception: log.exception("housekeeping")
             if n % 20 == 0:   # every ten minutes: a mission log line the whole crew sees
                 st = mission.state(self.ledger)
