@@ -180,7 +180,7 @@ class Telegram:
     async def command(self, text: str):
         parts = text.split(); cmd = parts[0].lower().lstrip("/"); arg = parts[1] if len(parts) > 1 else None
         if cmd in ("help", "h"):
-            await self.send("<b>Bridge commands</b>\n/status · /approvals · /approve N · /reject N\n/hold BAY · /boost BAY · /run BAY\n/report · /mother · /listings · /brief · /clips\n/clip NICHE | BRIEF | CTA  (order a short)\n/quiet · /normal (how much I message you)")
+            await self.send("<b>Bridge commands</b>\n/status · /approvals · /approve N · /reject N\n/hold BAY · /boost BAY · /run BAY\n/report · /mother · /listings · /brief · /clips\n/clip NICHE | BRIEF | CTA  (order a short)\n/stockzip · /stockdone (Adobe Stock hand-upload bundle)\n/quiet · /normal (how much I message you)")
         elif cmd == "status":
             await self.send(self.status_text())
         elif cmd == "approvals":
@@ -221,6 +221,18 @@ class Telegram:
             b = (sh.get("research") or {}).get("brief") or {}
             if not b: await self.send("No research brief yet. /run research"); return
             await self.send("<b>Current brief</b>\n" + "\n".join(f"• {k}: {v}" for k, v in b.items() if v not in (None, "", "none")))
+        elif cmd == "stockzip":
+            from .tools import stock
+            b = stock.weekly_bundle(self.L)
+            if not b: await self.send("Nothing waiting — every stock set is already bundled or uploaded."); return
+            await self.send(f"🗃 {b['count']} images bundled ({b['size_mb']} MB):\n{config.PUBLIC_URL or 'your dashboard address'}{b['url']}\n\nAt contributor.stock.adobe.com → Upload: drag the images in, click <b>Upload CSV</b> and pick metadata.csv from the zip, tick <b>Created using generative AI</b>, Submit. Then /stockdone.")
+            if b["size_mb"] < 45:
+                async def _doc():
+                    try:
+                        async with httpx.AsyncClient(timeout=300) as c:
+                            with open(b["zip"], "rb") as fh: await c.post(f"{self.api}/sendDocument", data={"chat_id": self.chat}, files={"document": (b["zip"].split("/")[-1], fh, "application/zip")})
+                    except Exception as e: log.warning("stock zip send: %s", e)
+                asyncio.create_task(_doc())
         elif cmd == "stockdone":
             self.L.kv_set("stock_pending", "0"); await self.send("Noted — stock queue cleared.")
         elif cmd == "listings":
@@ -250,8 +262,13 @@ class Telegram:
                  f"Directive: {m.get('directive') or '—'}"]
         if d["top"]: lines.append("Top: " + "; ".join(f"{t} ({n})" for t, n in d["top"][:3]))
         try:
-            sp = int(self.L.kv_get("stock_pending") or 0)
-            if sp and datetime.now().weekday() == 0: lines.append(f"🗃 {sp} stock image(s) uploaded, waiting for your submit at contributor.stock.adobe.com (select all → tick 'generative AI' → Submit). Reply /stockdone after.")
+            if datetime.now().weekday() == 0:
+                from .tools import stock
+                b = stock.weekly_bundle(self.L)
+                if b: lines.append(f"🗃 Adobe Stock: {b['count']} new images bundled ({b['size_mb']} MB). Download {config.PUBLIC_URL or 'your dashboard address'}{b['url']} , drag the images into contributor.stock.adobe.com → Upload, click Upload CSV with the metadata.csv inside, tick 'Created using generative AI', Submit. Reply /stockdone after.")
+                else:
+                    sp = int(self.L.kv_get("stock_pending") or 0)
+                    if sp: lines.append(f"🗃 {sp} stock image(s) still waiting for your submit at contributor.stock.adobe.com. Reply /stockdone after.")
         except Exception: pass
         if d["notes"]: lines.append(f"Mother's note: {d['notes'][-1]}")
         pend = len(self.L.approvals("pending"))

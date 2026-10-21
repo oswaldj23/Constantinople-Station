@@ -62,7 +62,8 @@ CLIPS_PER_DAY    = float(os.getenv("CLIPS_PER_DAY", "3"))   # Etsy listings a da
 PRODUCT_ROTATION = os.getenv("PRODUCT_ROTATION", "tee,sweatshirt,mug,poster,tee,tote,hoodie")
 DESIGN_STYLES    = os.getenv("DESIGN_STYLES", "")
 PINTEREST_ACCESS_TOKEN = os.getenv("PINTEREST_ACCESS_TOKEN") or None
-STOCK_SFTP_USER = os.getenv("STOCK_SFTP_USER") or None                # comma list to restrict the style library; empty = all
+STOCK_SFTP_USER = os.getenv("STOCK_SFTP_USER") or None
+PUBLIC_URL      = (os.getenv("PUBLIC_URL") or "").rstrip("/")   # how you reach the dashboard, e.g. http://100.x.y.z:8787 — used in links Mother sends you                # comma list to restrict the style library; empty = all
 SIGNAL_GENRES  = [g.strip() for g in os.getenv("SIGNAL_GENRES", "scary stories,reddit stories,aita,story time,revenge stories,creepypasta,true scary stories,minecraft parkour,satisfying,facts,history,motivation,cozy aesthetic,ai art,etsy small business,day in the life").split(",") if g.strip()]
 
 def integrations() -> dict:

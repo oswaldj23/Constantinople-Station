@@ -55,8 +55,12 @@ async def upload(ctx, *, dry_run: bool = True, **_):
             kws = [k.strip() for k in f["keywords"] if k.strip()][:49]
             w.writerow([Path(f["file"]).name, f["title"][:200], ",".join(kws), f.get("category", 8), ""])
     host, user, pw = _env("STOCK_SFTP_HOST", "sftp.contributor.adobestock.com"), _env("STOCK_SFTP_USER"), _env("STOCK_SFTP_PASSWORD")
+    L = ctx.get("_ledger")
     if dry_run or not (user and pw):
-        return {"uploaded": 0, "csv": str(csvp), "cost": 0.0, "summary": f"{len(files)} image(s) + metadata ready ({'dry run' if dry_run else 'STOCK_SFTP_USER/PASSWORD not set'}) · kept in output/stock/"}
+        # no SFTP (Adobe only enables it for established accounts): queue this set for the weekly hand-upload bundle
+        if L is not None and not dry_run:
+            pend = [x for x in (L.kv_get("stock_unsubmitted") or "").split(",") if x]; pend.append(ctx["run_id"]); L.kv_set("stock_unsubmitted", ",".join(pend[-60:]))
+        return {"uploaded": 0, "csv": str(csvp), "cost": 0.0, "summary": f"{len(files)} image(s) + metadata ready · queued for the weekly bundle ({'dry run' if dry_run else 'no SFTP yet'})"}
     try:
         import paramiko
         t = paramiko.Transport((host, 22)); t.connect(username=user, password=pw); s = paramiko.SFTPClient.from_transport(t)
@@ -66,8 +70,31 @@ async def upload(ctx, *, dry_run: bool = True, **_):
         s.put(str(csvp), f"{ctx['run_id']}_metadata.csv"); s.close(); t.close()
     except Exception as e:
         return {"summary": "upload failed", "incident": f"Adobe Stock SFTP failed · {type(e).__name__}: {str(e)[:120]} · check STOCK_SFTP_* in .env", "cost": 0.0}
-    L = ctx.get("_ledger")
     if L is not None:
         try: L.kv_set("stock_pending", str(int(L.kv_get("stock_pending") or 0) + n))
         except Exception: pass
     return {"uploaded": n, "csv": str(csvp), "cost": 0.0, "summary": f"{n} image(s) uploaded to Adobe Stock · waiting for your one-click submit in the contributor portal"}
+
+
+def weekly_bundle(L) -> dict | None:
+    """Zip every unsubmitted set (images + one merged metadata.csv) for a hand upload through the portal.
+    Returns the zip path, its URL under /output, and the count; None when nothing is waiting."""
+    import csv as _csv, zipfile
+    from datetime import date
+    runs = [x for x in (L.kv_get("stock_unsubmitted") or "").split(",") if x]
+    if not runs: return None
+    out = OUT / "bundles"; out.mkdir(parents=True, exist_ok=True)
+    zpath = out / f"adobe-stock-{date.today().isoformat()}.zip"; rows = []; n = 0
+    with zipfile.ZipFile(zpath, "w", zipfile.ZIP_STORED) as z:
+        for rid in runs:
+            d = OUT / rid; c = d / "metadata.csv"
+            if not c.exists(): continue
+            with open(c, newline="", encoding="utf-8") as fh:
+                for i, row in enumerate(_csv.reader(fh)):
+                    if i == 0: continue
+                    f = d / row[0]
+                    if f.exists(): z.write(f, row[0]); rows.append(row); n += 1
+        buf = io.StringIO(); w = _csv.writer(buf); w.writerow(["Filename", "Title", "Keywords", "Category", "Releases"]); w.writerows(rows)
+        z.writestr("metadata.csv", buf.getvalue())
+    L.kv_set("stock_unsubmitted", ""); L.kv_set("stock_pending", str(int(L.kv_get("stock_pending") or 0) + n))
+    return {"zip": str(zpath), "url": f"/output/stock/bundles/{zpath.name}", "count": n, "size_mb": round(zpath.stat().st_size / 1e6, 1)}
