@@ -123,6 +123,12 @@ def canned(prompt_file: str, ctx: dict) -> dict:
     if "digital_review" in prompt_file:
         ld = ctx.get("digital_listing") or {}; ok = "nothing will be shipped" in ld.get("description", "").lower() and "ai tools" in ld.get("description", "").lower()
         return {"summary": "Reviewed", "verdict": "approve" if ok else "reject", "reason": "coherent set, disclosure present" if ok else "missing disclosure"}
+    if "comment_review" in prompt_file:
+        rs = (ctx.get("comment_plan") or {}).get("replies") or []; ok = all("http" not in r.get("reply", "").lower() for r in rs)
+        return {"summary": "Reviewed", "verdict": "approve" if ok else "reject", "reason": "specific, no links" if ok else "link in a reply"}
+    if "comment_replies" in prompt_file:
+        cs = (ctx.get("fetch") or {}).get("comments") or []
+        return {"summary": f"{min(2, len(cs))} replies drafted", "replies": [{"comment_id": c["id"], "reply": "Part two goes up tonight — the camera footage is worse than the door." if "part" in c["text"].lower() else "Honestly? The lease was cheap and the cat seemed fine with it. For a while."} for c in cs[:2]]}
     if "longform_review" in prompt_file:
         c = ctx.get("compile") or {}; ok = bool(c.get("file")) and (c.get("stories") or 0) >= 6 and 240 <= float(c.get("duration") or 0) <= 1800
         return {"summary": "Reviewed: post it" if ok else "Reviewed: hold", "verdict": "approve" if ok else "reject", "reason": "stories, length and chapters in order" if ok else "too few stories or wrong length"}

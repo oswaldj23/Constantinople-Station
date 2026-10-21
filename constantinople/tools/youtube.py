@@ -165,3 +165,60 @@ async def upload(ctx, *, dry_run: bool = True, privacy: str = "public", **_):
                     await c.post("https://www.googleapis.com/upload/youtube/v3/thumbnails/set", params={"videoId": vid}, headers={"Authorization": f"Bearer {tok}", "Content-Type": "image/jpeg"}, content=th.read())
         except Exception: pass
     return {"url": f"https://youtube.com/shorts/{vid}", "video_id": vid, "cost": 0.0, "summary": f"live on YouTube · {title}"}
+
+
+# ── comments: read what viewers say on our shorts, answer the ones worth answering ─────────────────
+async def fetch_comments(ctx, *, per_video: int = 20, videos: int = 15, dry_run: bool = True, **_):
+    """New top-level comments on our recent videos that we have not answered. Needs the force-ssl scope
+    (re-run youtube-auth once if the token predates it)."""
+    L = ctx.get("_ledger")
+    if dry_run or not _creds()[2]:
+        return {"comments": [{"id": "c1", "video_id": "v1", "video_title": "A second door that isn't on the lease", "author": "sam", "text": "part 2???", "likes": 12},
+                             {"id": "c2", "video_id": "v1", "video_title": "A second door that isn't on the lease", "author": "jo", "text": "why didn't he just move out", "likes": 3}],
+                "cost": 0.0, "summary": "2 comments (sample)"}
+    tok = access_token()
+    if not tok: return {"comments": [], "cost": 0.0, "summary": "YouTube not linked"}
+    answered = set((L.kv_get("comments_answered") or "").split(",")) if L is not None else set()
+    out = []; units = 0
+    async with httpx.AsyncClient(timeout=30, headers={"Authorization": f"Bearer {tok}"}) as c:
+        ch = await c.get(f"{API}/channels", params={"part": "contentDetails", "mine": "true"}); units += 1
+        try: uploads = ch.json()["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+        except Exception: return {"comments": [], "cost": 0.0, "summary": "no channel"}
+        pl = await c.get(f"{API}/playlistItems", params={"part": "snippet", "playlistId": uploads, "maxResults": videos}); units += 1
+        for it in pl.json().get("items", []):
+            vid = it["snippet"]["resourceId"]["videoId"]; vtitle = it["snippet"]["title"]
+            r = await c.get(f"{API}/commentThreads", params={"part": "snippet", "videoId": vid, "maxResults": per_video, "order": "relevance", "textFormat": "plainText"}); units += 1
+            if r.status_code == 403 and "insufficient" in r.text.lower():
+                if L is not None and L.kv_get("comments_scope_warned") != "1":
+                    L.kv_set("comments_scope_warned", "1")
+                    L.emit("clips", "status", "Comments: the YouTube login predates comment access · run `python -m constantinople youtube-auth` once to enable replies", agent="REEL")
+                return {"comments": [], "cost": 0.0, "summary": "comment access not granted yet (re-run youtube-auth once)"}
+            if r.status_code != 200: continue
+            for th in r.json().get("items", []):
+                top = th["snippet"]["topLevelComment"]; sn = top["snippet"]
+                if top["id"] in answered or sn.get("authorChannelId", {}).get("value") == config.YOUTUBE_CHANNEL: continue
+                if th["snippet"].get("totalReplyCount", 0) > 0 and any(x in (sn.get("textDisplay") or "").lower() for x in ()): pass
+                out.append({"id": top["id"], "video_id": vid, "video_title": vtitle, "author": sn.get("authorDisplayName", ""), "text": (sn.get("textDisplay") or "")[:300], "likes": int(sn.get("likeCount", 0)), "replies": int(th["snippet"].get("totalReplyCount", 0))})
+    out.sort(key=lambda x: -x["likes"])
+    return {"comments": out[:40], "quota_units": units, "cost": 0.0, "summary": f"{len(out)} unanswered comment(s) across recent videos"}
+
+
+async def reply_comments(ctx, *, dry_run: bool = True, **_):
+    """Post the replies REEL wrote (after Mother's check), within the daily cap, never with links."""
+    L = ctx.get("_ledger"); plan = (ctx.get("comment_plan") or {}).get("replies") or []
+    cap = int(__import__("os").getenv("COMMENT_REPLIES_PER_DAY", "10"))
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d"); key = f"comment_count_{today}"
+    done_today = int(L.kv_get(key) or 0) if L is not None else 0
+    plan = [r for r in plan if r.get("comment_id") and r.get("reply") and "http" not in r["reply"].lower()][: max(0, cap - done_today)]
+    if not plan: return {"posted": 0, "cost": 0.0, "summary": "nothing to reply to" if done_today < cap else f"daily reply cap ({cap}) reached"}
+    if dry_run or not _creds()[2]:
+        return {"posted": len(plan), "cost": 0.0, "summary": f"{len(plan)} repl{'y' if len(plan)==1 else 'ies'} drafted (dry run)"}
+    tok = access_token(); posted = 0; answered = set((L.kv_get("comments_answered") or "").split(",")) if L is not None else set()
+    async with httpx.AsyncClient(timeout=30, headers={"Authorization": f"Bearer {tok}"}) as c:
+        for r in plan:
+            res = await c.post(f"{API}/comments", params={"part": "snippet"}, json={"snippet": {"parentId": r["comment_id"], "textOriginal": r["reply"][:900]}})
+            if res.status_code in (200, 201): posted += 1; answered.add(r["comment_id"])
+            elif res.status_code == 403 and "quota" in res.text.lower(): break
+    if L is not None:
+        L.kv_set("comments_answered", ",".join(sorted(answered)[-2000:])); L.kv_set(key, str(done_today + posted))
+    return {"posted": posted, "cost": 0.0, "summary": f"{posted} repl{'y' if posted==1 else 'ies'} posted · {done_today + posted}/{cap} today"}

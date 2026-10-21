@@ -1,0 +1,11 @@
+id: comments
+name: CLIP FORGE · COMMENTS
+display_as: clips
+agents: [REEL]
+quiet: true
+cadence_seconds: 14400         # every 4 hours: answer the comments worth answering on our shorts
+steps:
+  - {id: fetch,        name: Read comments,  kind: tool,  tool: youtube.fetch_comments, agent: REEL, quiet: true}
+  - {id: comment_plan, name: Write replies,  kind: agent, agent: REEL, prompt: comment_replies.md}
+  - {id: mother_check, name: Mother's check, kind: agent, agent: MOTHER, prompt: comment_review.md, verdict_from: verdict}
+  - {id: post,         name: Reply,          kind: tool,  tool: youtube.reply_comments, agent: REEL}
