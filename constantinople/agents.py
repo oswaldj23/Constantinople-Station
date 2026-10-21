@@ -124,6 +124,10 @@ def canned(prompt_file: str, ctx: dict) -> dict:
     if "digital_review" in prompt_file:
         ld = ctx.get("digital_listing") or {}; ok = "nothing will be shipped" in ld.get("description", "").lower() and "ai tools" in ld.get("description", "").lower()
         return {"summary": "Reviewed", "verdict": "approve" if ok else "reject", "reason": "coherent set, disclosure present" if ok else "missing disclosure"}
+    if "shop_audit" in prompt_file:
+        f = ctx.get("facts") or {}
+        return {"summary": "Audit done", "score": 62, "gaps": [f"{f.get('live_publish_events',0)} listings live — a shop needs 30+ to be found", "Product mix leans on tees; sweatshirts and mugs underrepresented", "No listing yet targets Thanksgiving despite 'design now'"],
+                "for_creator": ["Confirm shipping profile is United States only", "Add the shop icon and banner", "Fill the About section"]}
     if "seo_rewrite" in prompt_file:
         ls = (ctx.get("pick") or {}).get("listings") or []
         return {"summary": f"{len(ls)} rewritten", "rewrites": [{"product_id": l["product_id"], "title": f"Gift for {l.get('concept','Her').title()} Lover | {l.get('product') or 'Tee'} | Christmas Gift", "tags": ["gift for her", "christmas gift", "cozy sweatshirt", "plant mom gift", "nature lover", "made to order", "unisex tee", "birthday gift", "aesthetic shirt", "hand drawn", "gift idea", "soft tee", "for mom"]} for l in ls]}

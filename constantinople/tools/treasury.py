@@ -54,6 +54,33 @@ async def pnl(ctx, *, days: int = 30, dry_run: bool = True, **_):
             "summary": f"{days}d margin ${total_margin:,.2f} · " + " · ".join(f"{b} ${v['margin']:,.2f}" for b, v in out.items()) if out else f"{days}d · no money moved yet"}
 
 
+async def shop_facts(ctx, *, dry_run: bool = True, **_):
+    """What the ledger and Printify know about the shop, for the buyer's-eye audit."""
+    import json as _j
+    from .. import memory, calendar as cal
+    L = ctx["_ledger"]; rows = memory.listing_performance(L)
+    live = L.db.execute("SELECT COUNT(*) c FROM events WHERE bay='etsy' AND kind='publish' AND (msg LIKE 'Published %' OR msg LIKE 'Listing live %')").fetchone()["c"]
+    products = []
+    if not dry_run and config.PRINTIFY_API_KEY:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=60, headers={"Authorization": f"Bearer {config.PRINTIFY_API_KEY}"}) as c:
+                r = await c.get(f"https://api.printify.com/v1/shops/{config.PRINTIFY_SHOP_ID}/products.json", params={"limit": 50})
+                for p in (r.json().get("data", []) if r.status_code == 200 else []):
+                    ext = p.get("external") or {}; vs = [v for v in p.get("variants", []) if v.get("is_enabled")]
+                    products.append({"title": p.get("title", "")[:90], "published": bool(ext.get("handle")), "url": ext.get("handle"), "images": len(p.get("images", [])), "variants": len(vs),
+                                     "price_range": [min((v["price"] for v in vs), default=0) / 100, max((v["price"] for v in vs), default=0) / 100], "has_disclosure": "ai tools" in (p.get("description") or "").lower(), "tags": len(p.get("tags") or [])})
+        except Exception as e:
+            products = [{"error": str(e)[:100]}]
+    styles = {}; types = {}
+    for a in L.artifacts(kind_filter="listing", limit=200):
+        p = a["payload"]; st = (p.get("trend_scan") or {}).get("style") or "botanical"; ty = (p.get("mockup_build") or {}).get("product") or "T-Shirt"
+        styles[st] = styles.get(st, 0) + 1; types[ty] = types.get(ty, 0) + 1
+    return {"live_publish_events": live, "listings_in_ledger": len(rows), "printify_products": products, "style_mix": styles, "product_mix": types,
+            "upcoming": [o for o in cal.upcoming() if "too late" not in o["verdict"]][:4], "integrations": config.integrations(), "cost": 0.0,
+            "summary": f"{len(products) or len(rows)} products · {live} publish events · {len(styles)} styles · {len(types)} product types"}
+
+
 async def pick_stale(ctx, *, max_items: int = 2, min_age_days: int = 30, dry_run: bool = True, **_):
     """Live listings 30+ days old with zero sales (and zero views when Etsy stats exist), not refreshed in 30 days."""
     import json as _j

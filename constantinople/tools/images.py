@@ -89,6 +89,26 @@ def read_text(path: str) -> str | None:
         return None
 
 
+def _pick_better(path_a: str, path_b: str, concept: str) -> tuple[str, str]:
+    """Mother's eye on two candidates: which is the stronger product design? Returns (winner_path, reason)."""
+    if not config.ANTHROPIC_API_KEY: return path_a, "no model key"
+    try:
+        import anthropic, io
+        from PIL import Image
+        def enc(p):
+            im = Image.open(p).convert("RGBA"); bg = Image.new("RGBA", im.size, (245, 240, 230, 255)); bg.alpha_composite(im); im = bg.convert("RGB"); im.thumbnail((700, 700))
+            buf = io.BytesIO(); im.save(buf, "JPEG", quality=82); return base64.b64encode(buf.getvalue()).decode()
+        c = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+        msg = c.messages.create(model=config.MOTHER_MODEL, max_tokens=120, messages=[{"role": "user", "content": [
+            {"type": "text", "text": f"Two candidate designs for a print-on-demand product, concept: {concept}. Judge as a buyer scrolling Etsy: which reads instantly, has cleaner shapes and lettering, prints well, and feels like something someone would wear or give? Reply exactly 'A: <reason>' or 'B: <reason>' in under 20 words."},
+            {"type": "text", "text": "A:"}, {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": enc(path_a)}},
+            {"type": "text", "text": "B:"}, {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": enc(path_b)}}]}])
+        t = "".join(getattr(b, "text", "") for b in msg.content).strip()
+        return (path_b if t.upper().startswith("B") else path_a), t[:120]
+    except Exception as e:
+        return path_a, f"pick skipped ({type(e).__name__})"
+
+
 async def generate(ctx, *, prompt_from: str = "", n: int = 4, size: str = "1024x1024", variants: bool = False, dry_run: bool = True, **_):
     prompt = _lookup(ctx, prompt_from) or "flat hand-drawn illustration"
     wanted_text = (ctx.get("trend_scan") or {}).get("text") or ((ctx.get("research") or {}).get("brief") or {}).get("text")
@@ -135,6 +155,20 @@ async def generate(ctx, *, prompt_from: str = "", n: int = 4, size: str = "1024x
                     break
             if wanted_text and not ok:
                 return {"summary": "lettering failed", "incident": f"Design lettering failed QA after 3 renders · wanted '{wanted_text}' · {qa.get(label)} · concept rebriefed", "cost": config.IMAGE_COST_USD * spent}
+            # best of two: a second light candidate, and Mother picks before the dark version is made
+            if label == "light" and variants and config.BEST_OF_TWO and not poster:
+                r2 = await c.post("https://api.openai.com/v1/images/generations", headers={"Authorization": f"Bearer {config.IMAGE_API_KEY}"},
+                                  json={"model": "gpt-image-1", "prompt": ptxt + " A different composition from any previous attempt.", "n": 1, "size": size, "quality": "medium", "background": "transparent", "output_format": "png"})
+                spent += 1
+                if r2.status_code == 200:
+                    p2 = OUT / f"{ctx['run_id']}_light_b.png"; p2.write_bytes(base64.b64decode(r2.json()["data"][0]["b64_json"]))
+                    ok2 = True
+                    if wanted_text:
+                        got2 = read_text(str(p2)); ok2 = got2 is None or _norm(got2) == _norm(wanted_text)
+                    if ok2:
+                        win, why = _pick_better(str(p), str(p2), (ctx.get("trend_scan") or {}).get("concept", ""))
+                        qa["pick"] = why
+                        if win == str(p2): p2.replace(p)
             _upscale(str(p)); files.append(str(p)); labelled[label] = str(p)
     return {"files": files, "by_variant": labelled, "prompt": prompt, "text": wanted_text, "qa": qa, "cost": config.IMAGE_COST_USD * spent,
             "summary": f"{len(files)} print-ready design(s) rendered" + (" · light + dark shirt versions" if variants else "") + (f" · lettering verified: \"{wanted_text}\"" if wanted_text else "") + (f" · {spent - len(files)} re-render(s)" if spent > len(files) else "")}

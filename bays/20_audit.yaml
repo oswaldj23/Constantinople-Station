@@ -1,0 +1,9 @@
+id: audit
+name: TREASURY · SHOP AUDIT
+display_as: treasury
+quiet: true
+agents: [VAULT, MOTHER]
+cadence_seconds: 604800        # weekly: look at the shop the way a buyer would, list the gaps once
+steps:
+  - {id: facts,  name: Gather facts, kind: tool,  tool: treasury.shop_facts, agent: VAULT, quiet: true}
+  - {id: audit,  name: Audit,        kind: agent, agent: MOTHER, prompt: shop_audit.md, emit: report}

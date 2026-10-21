@@ -124,6 +124,9 @@ class Telegram:
             return
         elif k == "incident" and ev.get("bay") != "core" and config.TELEGRAM_VERBOSITY == "normal":
             text = f"⚠️ <b>{ev.get('bay','').upper()}</b> · {msg}"
+        elif k == "report" and ev.get("bay") == "audit":
+            a = ev.get("audit") or {}
+            text = f"🔎 <b>Shop audit</b> · score {a.get('score','?')}/100\n" + "\n".join(f"• {g}" for g in (a.get("gaps") or [])[:8]) + ("\n\n<b>For you to check on Etsy:</b>\n" + "\n".join(f"• {g}" for g in a.get("for_creator") or []) if a.get("for_creator") else "")
         elif k == "reply" and ev.get("draft"):
             text = f"✉️ <b>HERALD drafted a reply</b> — copy it into Etsy:\n\n<code>{ev['draft'][:1500]}</code>"
         elif k == "publish" and ev.get("bay") == "digital" and ev.get("draft"):
@@ -186,7 +189,7 @@ class Telegram:
     async def command(self, text: str):
         parts = text.split(); cmd = parts[0].lower().lstrip("/"); arg = parts[1] if len(parts) > 1 else None
         if cmd in ("help", "h"):
-            await self.send("<b>Bridge commands</b>\n/status · /approvals · /approve N · /reject N\n/hold BAY · /boost BAY · /run BAY\n/report · /mother · /listings · /brief · /clips\n/clip NICHE | BRIEF | CTA  (order a short)\n/backup (ledger to your phone) · /stockzip · /stockdone\n/quiet · /normal (how much I message you)")
+            await self.send("<b>Bridge commands</b>\n/status · /approvals · /approve N · /reject N\n/hold BAY · /boost BAY · /run BAY\n/report · /mother · /listings · /brief · /clips\n/clip NICHE | BRIEF | CTA  (order a short)\n/audit (buyer's-eye check of the shop) · /halt · /resume\n/backup (ledger to your phone) · /stockzip · /stockdone\n/quiet · /normal (how much I message you)")
         elif cmd == "status":
             await self.send(self.status_text())
         elif cmd == "approvals":
@@ -227,6 +230,12 @@ class Telegram:
             b = (sh.get("research") or {}).get("brief") or {}
             if not b: await self.send("No research brief yet. /run research"); return
             await self.send("<b>Current brief</b>\n" + "\n".join(f"• {k}: {v}" for k, v in b.items() if v not in (None, "", "none")))
+        elif cmd == "audit":
+            asyncio.create_task(self.orch.run_once("audit")); await self.send("Running the shop audit — a minute or two.")
+        elif cmd == "halt":
+            held = self.orch.halt_all(); await self.send(f"🛑 Halted. {len(held)} bays on HOLD — no spending, no publishing. /resume when ready.")
+        elif cmd == "resume":
+            held = self.orch.resume_all(); await self.send(f"▶️ Resumed {len(held)} bays.")
         elif cmd == "backup":
             from . import housekeeping
             r = housekeeping.backup(self.L)

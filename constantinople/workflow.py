@@ -114,6 +114,7 @@ class Runner:
             L.emit(bay.id, "poll" if st.get("quiet") else "step", f"{st['name']}: {result.get('summary','done')}", step=i + 1, agent=agent, amount=cost or None, run_id=run_id)
             if st.get("emit"):            # extra event kinds a step can raise (trend, publish, message…)
                 extra = {k: result[k] for k in ("draft", "image", "url") if result.get(k)}
+                if st["id"] == "audit": extra["audit"] = {k: result.get(k) for k in ("score", "gaps", "for_creator")}
                 L.emit(bay.id, st["emit"], result.get("summary", st["name"]), agent=agent, run_id=run_id, **({"to": st["to"]} if st.get("to") else {}), **extra)
             if st.get("transfer_to"):
                 L.emit(bay.id, "transfer", f"{agent} carries {st['name'].lower()} to {st['transfer_to']}", agent=agent, run_id=run_id, to=st["transfer_to"])

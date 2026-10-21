@@ -61,6 +61,7 @@ LISTINGS_PER_DAY = float(os.getenv("LISTINGS_PER_DAY", "2"))
 CLIPS_PER_DAY    = float(os.getenv("CLIPS_PER_DAY", "3"))   # Etsy listings a day (each ~$0.20 fee + ~$0.10 images)
 PRODUCT_ROTATION = os.getenv("PRODUCT_ROTATION", "tee,sweatshirt,mug,poster,tee,tote,hoodie")
 DESIGN_STYLES    = os.getenv("DESIGN_STYLES", "")
+BEST_OF_TWO      = _bool(os.getenv("BEST_OF_TWO"), True)           # render two candidates per listing; Mother picks the stronger
 PINTEREST_ACCESS_TOKEN = os.getenv("PINTEREST_ACCESS_TOKEN") or None
 STOCK_SFTP_USER = os.getenv("STOCK_SFTP_USER") or None
 PUBLIC_URL      = (os.getenv("PUBLIC_URL") or "").rstrip("/")   # how you reach the dashboard, e.g. http://100.x.y.z:8787 — used in links Mother sends you                # comma list to restrict the style library; empty = all

@@ -136,6 +136,27 @@ class Orchestrator:
                                  agent=config.MOTHER_NAME, velocity_per_day=st["velocity_per_day"])
 
     # bridge controls
+    def halt_all(self) -> list:
+        """Kill switch: every running bay to HOLD (gates stop, spend stops, publishing stops). Remembers which ones to resume."""
+        import json as _j
+        held = []
+        for b in self.bays.values():
+            st = self.ledger.bay(b.id).get("status", "running")
+            if st in ("running", "boost"):
+                self.ledger.set_status(b.id, "hold"); held.append(b.id)
+        self.ledger.kv_set("halted", _j.dumps(held))
+        self.ledger.emit("core", "status", f"HALT by {config.CREATOR} · {len(held)} bays held · nothing spends or publishes until /resume", agent=config.CREATOR, status="hold")
+        return held
+
+    def resume_all(self) -> list:
+        import json as _j
+        held = _j.loads(self.ledger.kv_get("halted") or "[]")
+        for bid in held:
+            if bid in self.bays: self.ledger.set_status(bid, "running")
+        self.ledger.kv_set("halted", "[]")
+        self.ledger.emit("core", "status", f"Resumed by {config.CREATOR} · {len(held)} bays back to normal cadence", agent=config.CREATOR, status="running")
+        return held
+
     def set_status(self, bay_id: str, action: str) -> str:
         cur = self.ledger.bay(bay_id).get("status", "running")
         new = {"hold": "running" if cur == "hold" else "hold", "boost": "running" if cur == "boost" else "boost", "wake": "running", "standby": "standby"}[action]

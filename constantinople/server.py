@@ -163,6 +163,14 @@ def decide(aid: int, decision: str):
     return {"ok": True, "id": aid, "status": decision}
 
 
+@app.post("/halt")
+def halt(): return {"ok": True, "held": orch.halt_all()}
+
+
+@app.post("/resume")
+def resume(): return {"ok": True, "resumed": orch.resume_all()}
+
+
 @app.post("/bays/{bay_id}/{action}")
 async def bay_action(bay_id: str, action: str):
     if bay_id not in orch.bays: raise HTTPException(404, "unknown bay")
