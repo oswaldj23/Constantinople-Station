@@ -4,6 +4,7 @@ after each mission review so directives improve week over week instead of resett
 import json
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
+from . import config
 
 
 def _since(days: int) -> str:
@@ -21,7 +22,14 @@ def shop_state(L) -> dict:
     elif oldest < 14: verdict = f"Shop opened {oldest} day(s) ago. New Etsy listings take 2–4 weeks to earn impressions; zero sales is expected and says nothing about demand yet."
     elif oldest < 45: verdict = f"Shop open {oldest} days. Judge demand per listing only after 30+ days live; prefer adding listings and occasions over cutting niches."
     else: verdict = f"Shop open {oldest} days; sales data is meaningful. Lean on winners, retire 45-day zero-sale listings."
-    return {"listings_drafted": drafted, "listings_live_on_etsy": live, "oldest_live_days": oldest, "verdict": verdict}
+    I = config.integrations(); waiting = []
+    if not I.get("pinterest"): waiting.append("Pinterest (app approval pending — Pin Deck idles, not failing)")
+    if I.get("etsy_pending") or not I.get("etsy"): waiting.append("Etsy API key (pending — digital goods parked, listing view counts unavailable)")
+    if not I.get("youtube_upload"): waiting.append("YouTube login")
+    standby = [b for b, s in L.bays().items() if s.get("status") == "standby"]
+    return {"listings_drafted": drafted, "listings_live_on_etsy": live, "oldest_live_days": oldest, "verdict": verdict,
+            "waiting_on_third_parties": waiting, "bays_on_standby_by_design": standby,
+            "rule": "A channel that is waiting on a third party or on standby has produced nothing for a reason; it is not underperforming and must not be cut, blamed, or 'fixed'."}
 
 
 def digest(L, days: int = 7) -> dict:
