@@ -80,6 +80,17 @@ A shop that makes one kind of design reaches one kind of buyer, and most print-o
 
 **Learning from our own channel**: the Signal Deck stores our YouTube video stats and joins them to the Forge's archive (format and hook per upload). Once eight or more shorts have view counts, the format rotation shifts: two picks in three go to the formats our channel's numbers favour, one in three explores the least-tried format; the writer sees the best-performing hooks in its format.
 
+## A station that gets better on its own
+
+- **Self-checking updates.** `update.sh` health-checks the engine after every update; if it does not come up, the previous version is restored automatically and Mother tells you on Telegram. Nightly rotating backups of the ledger and designs (never `.env`); `/backup` sends you the ledger file.
+- **Housekeeping.** Hourly cleanup of render intermediates; a low-disk guard that clears the oldest finished renders and warns once; a health line (disk, RAM, swap, load) in the morning report.
+- **Comment engagement** (`bays/17_comments.yaml`). Every four hours REEL reads unanswered comments on our shorts and answers the ones worth answering — questions, threads, "part 2?" — specific, varied, never a link, capped per day (`COMMENT_REPLIES_PER_DAY`); Mother checks the tone. Needs the comment scope: re-run `youtube-auth` once.
+- **Listing refresh** (`bays/19_seo.yaml`). Daily, up to two listings that have been live 30+ days with no sales (and no views once Etsy stats exist) get a new keyword-first title and 13 new tags, pushed through Printify and republished — the monthly refresh good shop owners do by hand.
+- **Weekly council** (`bays/18_council.yaml`). Mother reads the 30-day P&L by channel, the shop's age, sales per style and views per format, then sets a pace multiplier per bay (0.5–2×, at most ±0.5 a week, floors enforced) and names one experiment with a metric and a success number. The orchestrator paces bays by those multipliers.
+- **Print prep.** Every design is upscaled with a two-step Lanczos and light sharpening (Real-ESRGAN when installed), stripped of the semi-transparent halo image models leave at edges, and cropped to the artwork before it goes to Printify.
+- **Money view.** `/pnl` and the LEDGER tab show revenue, print cost, estimated Etsy fees, agent spend and margin per channel over 30 days, and margin per sol against the next waypoint.
+- **Renders off the loop.** ffmpeg and image work run in worker threads, so the dashboard, Telegram and other bays never freeze during a render; local Whisper (`faster-whisper`) provides word timings for free when installed.
+
 ## More fronts: Pin Deck, Digital Goods, Stock Vault, long-form
 
 - **Pin Deck** (`bays/13_pins.yaml`): three times a day, pins a live listing (round-robin) to a Pinterest board the station creates — real mockup, keyword title, two-line description, link to the Etsy listing. Pinterest is the largest free traffic source for Etsy shops. Setup: developers.pinterest.com → create an app (redirect URI `http://localhost:3005/oauth/redirect`, trial access is enough for your own account) → `PINTEREST_APP_ID`/`SECRET` → `python -m constantinople pinterest-auth`.

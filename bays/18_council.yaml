@@ -1,0 +1,10 @@
+id: council
+name: MOTHER · WEEKLY COUNCIL
+display_as: core
+quiet: true
+agents: [MOTHER]
+cadence_seconds: 604800        # once a week: move effort toward what earns, name one experiment
+steps:
+  - {id: ledger_view, name: Read the books,  kind: tool,  quiet: true, tool: treasury.pnl}
+  - {id: council,     name: Council,         kind: agent, agent: MOTHER, prompt: council.md}
+  - {id: apply,       name: Apply allocation, kind: tool, tool: treasury.apply_allocation, agent: MOTHER}

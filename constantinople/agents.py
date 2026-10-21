@@ -65,6 +65,7 @@ async def run_agent(agent: str, prompt_file: str, ctx: dict, *, dry_run: bool) -
                "assigned_style": (lambda st: __import__("constantinople.styles", fromlist=["describe"]).describe(st))(__import__("constantinople.styles", fromlist=["next_style"]).next_style(ctx["_ledger"])),
                "style_library": __import__("constantinople.styles", fromlist=["library_text"]).library_text(),
                "style_results": __import__("constantinople.styles", fromlist=["style_performance"]).style_performance(ctx["_ledger"]), "our_results": __import__("constantinople.tools.signal", fromlist=["our_results"]).our_results(ctx["_ledger"]), "product_type": __import__("constantinople.tools.printify", fromlist=["next_product"]).next_product(ctx["_ledger"]),
+               "last_experiment": ctx["_ledger"].kv_get("experiment") or "none yet",
                "recent_stock": [a["title"] for a in ctx["_ledger"].artifacts(kind_filter="stock", limit=8)] or "none yet",
                "recent_digital": [a["title"] for a in ctx["_ledger"].artifacts(kind_filter="digital", limit=8)] or "none yet",
                "mother": config.MOTHER_NAME, "assigned_format": (ctx.get("script") or {}).get("format") if isinstance(ctx.get("script"), dict) and (ctx.get("script") or {}).get("part_of") else __import__("constantinople.tools.signal", fromlist=["next_format"]).next_format(ctx["_ledger"]), "recent_clips": [c["title"] for c in __import__("constantinople.tools.signal", fromlist=["recent_clips"]).recent_clips(ctx["_ledger"], 10)] or "none yet",
@@ -123,6 +124,12 @@ def canned(prompt_file: str, ctx: dict) -> dict:
     if "digital_review" in prompt_file:
         ld = ctx.get("digital_listing") or {}; ok = "nothing will be shipped" in ld.get("description", "").lower() and "ai tools" in ld.get("description", "").lower()
         return {"summary": "Reviewed", "verdict": "approve" if ok else "reject", "reason": "coherent set, disclosure present" if ok else "missing disclosure"}
+    if "seo_rewrite" in prompt_file:
+        ls = (ctx.get("pick") or {}).get("listings") or []
+        return {"summary": f"{len(ls)} rewritten", "rewrites": [{"product_id": l["product_id"], "title": f"Gift for {l.get('concept','Her').title()} Lover | {l.get('product') or 'Tee'} | Christmas Gift", "tags": ["gift for her", "christmas gift", "cozy sweatshirt", "plant mom gift", "nature lover", "made to order", "unisex tee", "birthday gift", "aesthetic shirt", "hand drawn", "gift idea", "soft tee", "for mom"]} for l in ls]}
+    if "council" in prompt_file:
+        return {"summary": "Council held", "allocation": {"etsy": 1.0, "clips": 1.0, "pins": 1.0, "signal": 1.0, "research": 1.0}, "reasons": "Shop is young; hold the line and let listings age.",
+                "experiment": {"name": "Horror two-parters every day", "change": "clips: assign horror for 2 of 5 daily shorts, always with a part two", "metric": "average views per horror short vs others", "success": "horror avg views ≥ 1.5× the rest after 7 days"}, "note": "first council; baseline week"}
     if "comment_review" in prompt_file:
         rs = (ctx.get("comment_plan") or {}).get("replies") or []; ok = all("http" not in r.get("reply", "").lower() for r in rs)
         return {"summary": "Reviewed", "verdict": "approve" if ok else "reject", "reason": "specific, no links" if ok else "link in a reply"}

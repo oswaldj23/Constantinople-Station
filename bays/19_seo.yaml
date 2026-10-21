@@ -1,0 +1,10 @@
+id: seo
+name: TREASURY · LISTING REFRESH
+display_as: treasury
+quiet: true
+agents: [MINT, VAULT]
+cadence_seconds: 86400         # daily: refresh up to 2 stale listings' titles and tags, then republish
+steps:
+  - {id: pick,     name: Pick stale,     kind: tool,  tool: treasury.pick_stale, agent: VAULT, quiet: true, stop_if: nothing}
+  - {id: rewrite,  name: Rewrite copy,   kind: agent, agent: MINT, prompt: seo_rewrite.md}
+  - {id: apply,    name: Apply + republish, kind: tool, tool: treasury.apply_seo, agent: VAULT}

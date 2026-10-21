@@ -109,7 +109,10 @@ class Orchestrator:
                 await asyncio.sleep(5); continue
             await self._guarded(bay)
             boost = state.get("status") == "boost"
-            await asyncio.sleep(bay.cadence / config.SPEED / (1.8 if boost else 1.0))
+            try:
+                import json as _j; mult = float((_j.loads(self.ledger.kv_get("allocation") or "{}")).get(bay.id, 1.0) or 1.0)
+            except Exception: mult = 1.0
+            await asyncio.sleep(bay.cadence / config.SPEED / (1.8 if boost else 1.0) / max(0.25, min(2.0, mult)))
 
     async def _heartbeat(self):
         mission.check_waypoint(self.ledger, config.MOTHER_NAME)

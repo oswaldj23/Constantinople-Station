@@ -200,6 +200,12 @@ def signal_brief():
     return {"brief": signal.latest_brief(ledger), "clips": signal.recent_clips(ledger, 12)}
 
 
+@app.get("/pnl")
+async def pnl(days: int = 30):
+    from .tools import treasury
+    return await treasury.pnl({"_ledger": ledger, "run_id": "pnl"}, days=days)
+
+
 @app.get("/clips")
 def clips_list(limit: int = 12):
     from .tools import signal
