@@ -99,9 +99,12 @@ class Orchestrator:
                     await q.put(seed); await asyncio.sleep(5); continue
                 await self._guarded(bay, seed)
                 continue
-            # cadence: also drain any queued seeds first
+            # cadence: a queued seed (e.g. a story's part two) runs half a cycle after the last run, then the normal rhythm resumes
             if not q.empty():
-                await self._guarded(bay, await q.get()); continue
+                await asyncio.sleep(bay.cadence / config.SPEED / 2)
+                if self.ledger.bay(bay.id).get("status") == "hold": continue
+                await self._guarded(bay, await q.get())
+                await asyncio.sleep(bay.cadence / config.SPEED / 2); continue
             if state.get("status") == "hold":
                 await asyncio.sleep(5); continue
             await self._guarded(bay)
