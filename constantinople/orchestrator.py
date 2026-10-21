@@ -119,6 +119,10 @@ class Orchestrator:
             n += 1
             mission.check_waypoint(self.ledger, config.MOTHER_NAME)
             self.ledger.emit("core", "poll", "Heartbeat · all bays reporting", step=4, agent=config.CALLSIGN, quiet=True)
+            if n % 120 == 0:  # hourly housekeeping: clear render intermediates, watch the disk
+                try:
+                    from . import housekeeping; housekeeping.tidy(self.ledger)
+                except Exception: log.exception("housekeeping")
             if n % 20 == 0:   # every ten minutes: a mission log line the whole crew sees
                 st = mission.state(self.ledger)
                 self.ledger.emit("core", "mission", f"Mission log · ${st['banked']:,.2f} banked · {st['leg_pct']}% of leg {st['leg']:02d} to {st['next_waypoint']['name']} · {st['doublings_left']} doublings to Trillion Dawn",

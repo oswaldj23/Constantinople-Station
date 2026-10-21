@@ -265,7 +265,8 @@ class Telegram:
                  f"Listings made: {d['listings']} · live on Etsy: {d['shop']['listings_live_on_etsy']} (oldest {d['shop']['oldest_live_days']}d) · incidents: {d['incidents']} · Mother decisions: {d['mother_actions']}",
                  ("⚠️ " + d['shop']['verdict']) if d['shop']['listings_live_on_etsy'] == 0 or d['shop']['oldest_live_days'] < 14 else "",
                  f"Mission: leg {m['leg']:02d} · {m['leg_pct']}% to {m['next_waypoint']['name']} · ETA {m['eta_next_days']} sols" if m.get('eta_next_days') else f"Mission: leg {m['leg']:02d} · {m['leg_pct']}% to {m['next_waypoint']['name']}",
-                 f"Directive: {m.get('directive') or '—'}"]
+                 f"Directive: {m.get('directive') or '—'}",
+                 __import__("constantinople.housekeeping", fromlist=["health"]).health()]
         if d["top"]: lines.append("Top: " + "; ".join(f"{t} ({n})" for t, n in d["top"][:3]))
         try:
             if datetime.now().weekday() == 0:

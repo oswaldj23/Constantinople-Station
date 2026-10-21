@@ -34,7 +34,7 @@ W, H, FPS = 1080, 1920, 30
 
 
 def _ffmpeg(*args, timeout=600):
-    r = subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-threads", "2", *args], capture_output=True, text=True, timeout=timeout)
+    r = subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-threads", str(min(4, os.cpu_count() or 2)), *args], capture_output=True, text=True, timeout=timeout)
     if r.returncode != 0:
         why = (r.stderr or "").strip()[-400:]
         if r.returncode in (-9, 137) or (not why and r.returncode < 0):
