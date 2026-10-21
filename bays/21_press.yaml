@@ -2,6 +2,7 @@ id: press
 name: THE PRESS · KDP BOOKS
 display_as: etsy
 agents: [FORGE, MINT]
+standby: true                  # parked by the Creator for now; wake with /wake press
 cadence_seconds: 604800        # one upload-ready coloring book a week (40 pages ≈ $1.60 of images)
 artifact: book
 complete_msg: "Book ready: {title}"
