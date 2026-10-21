@@ -99,12 +99,6 @@ class Orchestrator:
                     await q.put(seed); await asyncio.sleep(5); continue
                 await self._guarded(bay, seed)
                 continue
-            # cadence: a queued seed (e.g. a story's part two) runs half a cycle after the last run, then the normal rhythm resumes
-            if not q.empty():
-                await asyncio.sleep(bay.cadence / config.SPEED / 2)
-                if self.ledger.bay(bay.id).get("status") == "hold": continue
-                await self._guarded(bay, await q.get())
-                await asyncio.sleep(bay.cadence / config.SPEED / 2); continue
             if state.get("status") == "hold":
                 await asyncio.sleep(5); continue
             await self._guarded(bay)
@@ -112,7 +106,22 @@ class Orchestrator:
             try:
                 import json as _j; mult = float((_j.loads(self.ledger.kv_get("allocation") or "{}")).get(bay.id, 1.0) or 1.0)
             except Exception: mult = 1.0
-            await asyncio.sleep(bay.cadence / config.SPEED / (1.8 if boost else 1.0) / max(0.25, min(2.0, mult)))
+            cycle = bay.cadence / config.SPEED / (1.8 if boost else 1.0) / max(0.25, min(2.0, mult))
+            # sleep out the cycle, but wake for queued work: a retry runs at once, a story's part two after a few hours
+            remaining = cycle; import time as _t
+            while remaining > 0:
+                t0 = _t.monotonic()
+                try:
+                    seed = await asyncio.wait_for(q.get(), timeout=remaining)
+                except asyncio.TimeoutError:
+                    break
+                if isinstance(seed, dict) and seed.get("script"):
+                    await asyncio.sleep(min(cycle / 2, 10800 / config.SPEED))
+                if self.ledger.bay(bay.id).get("status") == "hold":
+                    await q.put(seed); await asyncio.sleep(5)
+                else:
+                    await self._guarded(bay, seed or None)
+                remaining -= (_t.monotonic() - t0)
 
     async def _heartbeat(self):
         mission.check_waypoint(self.ledger, config.MOTHER_NAME)

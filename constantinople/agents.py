@@ -210,6 +210,7 @@ def canned(prompt_file: str, ctx: dict) -> dict:
                 "headlines": ["HIDDEN FEE", "NEVER AGAIN", "THE $7 MEAL"]}
     if "triage" in prompt_file:
         msg = str((ctx.get("incident") or {}).get("msg", "")).lower(); n = int(ctx.get("retries") or 0)
+        if "interrupted" in msg or "will retry" in msg: return {"action": "retry", "reason": "render was cut off by a restart; running it again"}
         if "not installed" in msg or "missing" in msg: return {"action": "escalate", "reason": "a program is missing on the server; only the Creator can install it"}
         if "re-render" in msg or "unusable" in msg: return {"action": "retry" if n < 2 else "escalate", "reason": "render failed; running the batch again"}
         if "similarity" in msg or "discarded" in msg or ("rejected" in msg and "approval" not in msg): return {"action": "rebrief", "reason": "design too close to an existing listing"}

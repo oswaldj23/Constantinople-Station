@@ -39,6 +39,8 @@ def _ffmpeg(*args, timeout=600):
         why = (r.stderr or "").strip()[-400:]
         if r.returncode in (-9, 137) or (not why and r.returncode < 0):
             why = f"ffmpeg was killed by the system (exit {r.returncode}) — almost certainly out of memory; run update.sh to add swap, or lower the render size"
+        elif r.returncode in (255, -2, -15) and not why:
+            why = "render interrupted (the station restarted mid-render) · will retry"
         raise RuntimeError(why or f"ffmpeg exit {r.returncode} with no message")
 
 
