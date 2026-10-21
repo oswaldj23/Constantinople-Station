@@ -1,8 +1,0 @@
-id: inbox
-name: ORDER INBOX POLL
-display_as: studio
-quiet: true
-agents: [RAY]
-cadence_seconds: 900           # check for new Fiverr orders every 15 min; fans them out to the studio
-steps:
-  - {id: poll, name: Poll inbox, kind: tool, quiet: true, tool: fiverr.poll_inbox, fanout: {orders: studio}}
