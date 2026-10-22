@@ -13,8 +13,8 @@ PRODUCTS = {
     "tee":        {"titles": ["Unisex Heavy Cotton Tee"], "fallback": 6,  "price": {"default": 2995, "2XL": 3195, "3XL": 3395}, "label": "T-Shirt", "scale": 0.85, "y": 0.4},
     "sweatshirt": {"titles": ["Unisex Heavy Blend", "Crewneck Sweatshirt"], "fallback": 49, "price": {"default": 4495, "2XL": 4795, "3XL": 4995}, "label": "Sweatshirt", "scale": 0.75, "y": 0.42},
     "hoodie":     {"titles": ["Unisex Heavy Blend", "Hooded Sweatshirt"], "fallback": 77, "price": {"default": 4995, "2XL": 5295, "3XL": 5495}, "label": "Hoodie", "scale": 0.7, "y": 0.45},
-    "mug":        {"titles": ["Ceramic Mug", "11oz"], "fallback": 68, "price": {"default": 1895, "15oz": 2195}, "label": "Mug", "scale": 0.9, "y": 0.5},
-    "tote":       {"titles": ["Tote Bag"], "fallback": 1086, "price": {"default": 2295}, "label": "Tote Bag", "scale": 0.8, "y": 0.5},
+    "mug":        {"titles": ["Ceramic Mug", "11oz"], "fallback": 68, "price": {"default": 1895, "15oz": 2195}, "label": "Mug", "scale": 0.7, "y": 0.5},
+    "tote":       {"titles": ["Tote Bag"], "fallback": 1086, "price": {"default": 2295}, "label": "Tote Bag", "scale": 0.6, "y": 0.45},
     "poster":     {"titles": ["Matte", "Vertical Posters"], "fallback": 282, "price": {"default": 2695, '16" x 20"': 3695, '18" x 24"': 4195, '24" x 36"': 5695}, "label": "Art Print", "scale": 1.0, "y": 0.5},
 }
 ROTATION = [p.strip() for p in (__import__("os").getenv("PRODUCT_ROTATION") or "tee,sweatshirt,mug,poster,tee,tote,hoodie").split(",") if p.strip() in PRODUCTS] or ["tee"]
@@ -111,8 +111,24 @@ async def create_product(ctx, *, design_from: str = "design_draft.files", produc
         if r.status_code >= 400: return {"summary": "product create failed", "incident": f"Print partner could not create the product · {r.status_code} {r.text[:160]}", "cost": 0.0}
         p = r.json()
         mockups = [i["src"] for i in p.get("images", []) if i.get("src")]
-        return {"product_id": p["id"], "product": spec["label"], "type": ptype, "mockups": mockups, "provider": provider["title"], "variants": len(variants), "cost": 0.0,
-                "summary": f"{spec['label']} {p['id']} built · {provider['title']} · {len(variants)} variants · {len(mockups)} mockups"}
+        # look at the mockup before anyone calls it ready: whole design visible, centred, not cut off; else shrink/recentre and rebuild (twice)
+        placement = dict(place); checks = []
+        for attempt in range(3):
+            ok, why = _mockup_ok(mockups[0] if mockups else None, concept)
+            checks.append(why)
+            if ok or attempt == 2: break
+            placement = {**placement, "scale": round(placement["scale"] * 0.75, 2), "y": round(max(0.3, placement["y"] - 0.07), 2)}
+            areas2 = [{"variant_ids": a["variant_ids"], "placeholders": [{"position": "front", "images": [{**img, **placement} for img in a["placeholders"][0]["images"]]}]} for a in areas]
+            u = await c.put(f"{API}/shops/{config.PRINTIFY_SHOP_ID}/products/{p['id']}.json", json={"print_areas": areas2})
+            if u.status_code >= 400: break
+            import asyncio as _a; await _a.sleep(12)   # Printify regenerates mockups asynchronously
+            g = await c.get(f"{API}/shops/{config.PRINTIFY_SHOP_ID}/products/{p['id']}.json")
+            if g.status_code == 200: mockups = [i["src"] for i in g.json().get("images", []) if i.get("src")] or mockups
+        if not ok:
+            await c.delete(f"{API}/shops/{config.PRINTIFY_SHOP_ID}/products/{p['id']}.json")
+            return {"summary": "placement failed", "incident": f"Mockup placement failed QA after 3 tries on {spec['label'].lower()} · {checks[-1]} · product discarded", "cost": 0.0}
+        return {"product_id": p["id"], "product": spec["label"], "type": ptype, "mockups": mockups, "provider": provider["title"], "variants": len(variants), "placement": placement, "mockup_qa": checks[-1], "cost": 0.0,
+                "summary": f"{spec['label']} {p['id']} built · {provider['title']} · {len(variants)} variants · {len(mockups)} mockups · placement {checks[-1][:60]}"}
 
 
 async def update_listing(ctx, *, product_from: str = "mockup_build.product_id", listing_from: str = "listing_draft", dry_run: bool = True, **_):
@@ -167,6 +183,25 @@ async def poll_orders(ctx, *, dry_run: bool = True, **_):
             sales.append({"receipt_id": oid, "amount": amount, "title": title, "print_cost": cost})
     if L: L.kv_set("printify_seen", ",".join(sorted(seen)[-500:]))
     return {"sales": sales, "cost": 0.0, "summary": f"{len(sales)} new order(s) from the shop"}
+
+
+def _mockup_ok(url: str | None, concept: str) -> tuple[bool, str]:
+    """Vision check on the first mockup image: is the design fully visible and centred on the product?"""
+    if not url: return False, "no mockup image"
+    if not config.ANTHROPIC_API_KEY: return True, "unchecked (no model key)"
+    try:
+        import anthropic, base64, httpx, io
+        from PIL import Image
+        raw = httpx.get(url, timeout=30).content
+        im = Image.open(io.BytesIO(raw)).convert("RGB"); im.thumbnail((800, 800)); buf = io.BytesIO(); im.save(buf, "JPEG", quality=82)
+        c = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+        msg = c.messages.create(model=config.AGENT_MODEL, max_tokens=100, messages=[{"role": "user", "content": [
+            {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.b64encode(buf.getvalue()).decode()}},
+            {"type": "text", "text": f"This is a product mockup for the design '{concept}'. Is the ENTIRE design visible (nothing cut off at any edge), reasonably centred on the printable area, and a sensible size (not tiny, not spilling off)? Reply exactly 'OK' or 'BAD: <reason in under 15 words>'."}]}])
+        t = "".join(getattr(b, "text", "") for b in msg.content).strip()
+        return t.upper().startswith("OK"), t[:100]
+    except Exception as e:
+        return True, f"unchecked ({type(e).__name__})"
 
 
 def _lookup(ctx, path):
