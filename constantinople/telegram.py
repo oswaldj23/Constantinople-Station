@@ -193,7 +193,7 @@ class Telegram:
     async def command(self, text: str):
         parts = text.split(); cmd = parts[0].lower().lstrip("/"); arg = parts[1] if len(parts) > 1 else None
         if cmd in ("help", "h"):
-            await self.send("<b>Bridge commands</b>\n/status · /approvals · /approve N · /reject N\n/hold BAY · /boost BAY · /run BAY\n/report · /mother · /listings · /brief · /clips\n/clip NICHE | BRIEF | CTA  (order a short)\n/audit (buyer's-eye check of the shop) · /halt · /resume\n/backup (ledger to your phone) · /stockzip · /stockdone\n/quiet · /normal (how much I message you)")
+            await self.send("<b>Bridge commands</b>\n/status · /approvals · /approve N · /reject N\n/hold BAY · /boost BAY · /run BAY\n/report · /mother · /listings · /brief · /clips\n/clip NICHE | BRIEF | CTA  (order a short)\n/diag (what is failing) · /audit · /halt · /resume\n/backup (ledger to your phone) · /stockzip · /stockdone\n/quiet · /normal (how much I message you)")
         elif cmd == "status":
             await self.send(self.status_text())
         elif cmd == "approvals":
@@ -234,6 +234,17 @@ class Telegram:
             b = (sh.get("research") or {}).get("brief") or {}
             if not b: await self.send("No research brief yet. /run research"); return
             await self.send("<b>Current brief</b>\n" + "\n".join(f"• {k}: {v}" for k, v in b.items() if v not in (None, "", "none")))
+        elif cmd == "diag":
+            inc = self.L.db.execute("SELECT ts, bay, msg FROM events WHERE kind='incident' ORDER BY id DESC LIMIT 12").fetchall()
+            bays = self.L.bays(); held = [b for b, s in bays.items() if s.get("status") == "hold"]; sb = [b for b, s in bays.items() if s.get("status") == "standby"]
+            try:
+                from .tools.youtube import check; yt = check(); yt_line = f"YouTube: OK · {yt['channel']}" if yt.get("ok") else f"YouTube: {yt.get('error')}"
+            except Exception as e: yt_line = f"YouTube check failed: {type(e).__name__}"
+            from . import housekeeping
+            lines = [f"<b>Diagnostics</b> · autonomy {config.AUTONOMY} · cap ${config.DAILY_SPEND_CAP:.0f} · {config.CLIPS_PER_DAY:.0f} clips/day · {config.LISTINGS_PER_DAY:.0f} listings/day",
+                     yt_line, f"held: {', '.join(held) or 'none'} · standby: {', '.join(sb) or 'none'}", housekeeping.health(), "", "<b>Last incidents</b>"]
+            lines += [f"• {r['ts'][5:16]} {r['bay']}: {r['msg'][:120]}" for r in inc] or ["• none"]
+            await self.send("\n".join(lines))
         elif cmd == "audit":
             asyncio.create_task(self.orch.run_once("audit")); await self.send("Running the shop audit — a minute or two.")
         elif cmd == "halt":
