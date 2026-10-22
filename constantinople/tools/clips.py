@@ -288,23 +288,67 @@ def footage_credit(name: str) -> str | None:
 SLICE_SECONDS = 7.0   # a visible change every ~7 s keeps thumbs still (pattern interrupt)
 
 
+_footage_cache: dict = {}
+BAD_FOOTAGE: set = set()   # files that failed to decode this session; reported in the summary so the Creator can replace them
+
+
+def _usable_footage() -> list:
+    """Footage files that actually decode: a video stream and a real duration. A half-downloaded or
+    audio-only file is skipped (and remembered) instead of killing the render. Probed once per file."""
+    if not FOOTAGE_DIR.exists(): return []
+    files = []
+    for p in FOOTAGE_DIR.iterdir():
+        if p.suffix.lower() not in (".mp4", ".mov", ".mkv", ".webm") or p.name.endswith(".part"): continue
+        key = (p.name, p.stat().st_size)
+        if key not in _footage_cache:
+            ok = False
+            try:
+                if shutil.which("ffprobe"):
+                    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(p)], capture_output=True, text=True, timeout=60)
+                    ok = "video" in (r.stdout or "") and _ffprobe_duration(p) > 10
+                else:
+                    ok = _ffprobe_duration(p) > 10
+            except Exception:
+                ok = False
+            _footage_cache[key] = ok
+            if not ok: BAD_FOOTAGE.add(p.name)
+        if _footage_cache[key]: files.append(p)
+    return files
+
+
 def _footage_segment(dur: float, out: Path, exclude: str | None = None) -> str | None:
     """Background from the Creator's footage: several ~7 s slices from random points (and random files),
-    alternating a slight zoom, cut together — rather than one static slice. Returns the source name(s) or None."""
-    if not FOOTAGE_DIR.exists(): return None
-    files = [p for p in FOOTAGE_DIR.iterdir() if p.suffix.lower() in (".mp4", ".mov", ".mkv", ".webm")]
+    alternating a slight zoom, cut together — rather than one static slice. Returns the source name(s) or None.
+    A slice that comes out empty (a truncated file whose header claims more than it holds, a bad seek) is retried
+    from another point or file; a file that fails twice is dropped for the rest of the session."""
+    files = _usable_footage()
     if not files: return None
     n = max(1, int(round(dur / SLICE_SECONDS))); per = dur / n
-    parts = []; names = []
-    tmpdir = out.parent / "bgparts"; tmpdir.mkdir(exist_ok=True)
+    parts = []; names = []; failures: dict = {}
+    tmpdir = out.parent / "bgparts"; shutil.rmtree(tmpdir, ignore_errors=True); tmpdir.mkdir(exist_ok=True)
     for i in range(n):
-        src = random.choice(files); total = _ffprobe_duration(src)
-        start = random.uniform(1, max(1.1, total - per - 1)) if total > per + 2 else 0
-        zoom = 1.0 if i % 2 == 0 else 1.07
-        vf = f"scale=-2:{int(H*zoom)},crop={W}:{H},eq=brightness=-0.04,fps={FPS}" if zoom > 1 else f"scale=-2:{H},crop={W}:{H},eq=brightness=-0.04,fps={FPS}"
-        part = tmpdir / f"p{i:02d}.mp4"
-        loop = ["-stream_loop", "-1"] if total < per + 2 else []
-        _ffmpeg(*loop, "-ss", f"{start:.2f}", "-t", f"{per:.2f}", "-i", str(src), "-an", "-vf", vf, "-c:v", "libx264", "-preset", "fast", "-crf", "20", "-pix_fmt", "yuv420p", str(part))
+        part = tmpdir / f"p{i:02d}.mp4"; done = False
+        for attempt in range(4):
+            pool = [f for f in files if failures.get(f.name, 0) < 2] or files
+            src = random.choice(pool); total = _ffprobe_duration(src)
+            # truncated downloads often report the full length in the header: keep seeks in the first 85 % on retries
+            ceiling = total - per - 1 if attempt == 0 else total * 0.85 - per
+            start = random.uniform(1, max(1.1, ceiling)) if total > per + 2 else 0
+            zoom = 1.0 if i % 2 == 0 else 1.07
+            vf = f"scale=-2:{int(H*zoom)},crop={W}:{H},eq=brightness=-0.04,fps={FPS}" if zoom > 1 else f"scale=-2:{H},crop={W}:{H},eq=brightness=-0.04,fps={FPS}"
+            loop = ["-stream_loop", "-1"] if total < per + 2 else []
+            try:
+                _ffmpeg(*loop, "-ss", f"{start:.2f}", "-t", f"{per:.2f}", "-i", str(src), "-an", "-vf", vf, "-c:v", "libx264", "-preset", "fast", "-crf", "20", "-pix_fmt", "yuv420p", str(part))
+                if part.exists() and part.stat().st_size > 10_000 and _ffprobe_duration(part) > min(1.0, per * 0.5):
+                    done = True; break
+                raise RuntimeError("empty slice")
+            except Exception:
+                failures[src.name] = failures.get(src.name, 0) + 1
+                if failures[src.name] >= 2: BAD_FOOTAGE.add(src.name)
+                part.unlink(missing_ok=True)
+        if not done:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            raise RuntimeError("footage slices came out empty · " + ", ".join(sorted(BAD_FOOTAGE)) if BAD_FOOTAGE else "footage slices came out empty")
         parts.append(part); names.append(src.name)
     lst = tmpdir / "list.txt"; lst.write_text("".join(f"file '{p}'\n" for p in parts))
     _ffmpeg("-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(out))
@@ -352,13 +396,18 @@ async def _background_impl(ctx, *, dry_run: bool = True, **_):
     if not _have_ffmpeg(): return {"summary": "ffmpeg missing", "incident": INSTALL_HINT, "cost": 0.0}
     vo = ctx.get("voiceover") or {}; dur = float(vo.get("duration") or 30) + 0.6
     d = OUT / ctx["run_id"]; d.mkdir(parents=True, exist_ok=True); out = d / "bg.mp4"
+    footage_problem = None
     try:
         name = _footage_segment(dur, out)
         if name:
-            cr = footage_credit(name)
-            return {"file": str(out), "source": f"footage/{name}", "credit": cr, "cost": 0.0, "summary": f"background: footage/{name}" + (f" · credit: {cr}" if cr else "")}
+            cr = footage_credit(name); bad = f" · skipped unreadable footage: {', '.join(sorted(BAD_FOOTAGE))}" if BAD_FOOTAGE else ""
+            return {"file": str(out), "source": f"footage/{name}", "credit": cr, "cost": 0.0, "summary": f"background: footage/{name}" + (f" · credit: {cr}" if cr else "") + bad}
+    except Exception as e:
+        footage_problem = str(e)[:160]   # fall through: a bad footage file must not stop the short
+    try:
         _procedural_bg(F["bg"], dur, out)
-        return {"file": str(out), "source": f"generated:{F['bg']}", "cost": 0.0, "summary": f"background: station-generated ({F['bg']}) · drop your own gameplay in footage/ to use it instead"}
+        note = f" · footage failed ({footage_problem}) — check footage/ for a half-downloaded file" if footage_problem else " · drop your own gameplay in footage/ to use it instead"
+        return {"file": str(out), "source": f"generated:{F['bg']}", "cost": 0.0, "summary": f"background: station-generated ({F['bg']})" + note}
     except Exception as e:
         return {"summary": "background failed", "incident": f"Background render failed · {str(e)[:160]}", "cost": 0.0}
 
