@@ -8,7 +8,7 @@ Mission: {{mission}}
 Last council's experiment and what happened: {{last_experiment}}
 
 Allocation: a multiplier per bay — etsy (listings/day), clips (shorts/day), pins, signal, research — between 0.5 and 2.0 (1.0 = the configured pace). Floors are enforced elsewhere; your job is direction: push what earns or is clearly growing, ease off what has had 30+ days and nothing, never change more than ±0.5 from last week. When nothing is live or the shop is younger than 14 days, keep everything at 1.0 and say why.
-Experiment: ONE change with a measurable outcome in 7 days (a style to double, a genre to add, a price band to test, a product type to pause). Name the metric and the number that would count as success.
+Experiment: ONE change with a measurable outcome in 7 days, expressed as something the station can actually set: `format_boost` (e.g. {"aita": 2.0} — two picks in three lean that way, the third still explores), `illustrated_share` (0–1), a style or product to emphasise, or a price band. Do not write directives that tell bays to stop or that contradict the rotation — the rotation is how evidence is gathered. Name the metric and the number that would count as success.
 
 Return JSON: {"summary": "<one line>", "allocation": {"etsy": 1.0, "clips": 1.0, "pins": 1.0, "signal": 1.0, "research": 1.0}, "reasons": "<2 sentences>",
- "experiment": {"name": "...", "change": "<exactly what changes, as a setting or instruction>", "metric": "...", "success": "<number>"}, "note": "<one line for your memory>"}
+ "experiment": {"name": "...", "change": "<one sentence>", "format_boost": {"aita": 1.0}, "illustrated_share": null, "metric": "...", "success": "<number>"}, "note": "<one line for your memory>"}

@@ -77,6 +77,7 @@ async def run_agent(agent: str, prompt_file: str, ctx: dict, *, dry_run: bool) -
     prompt = _fill(_load_prompt(prompt_file), ctx)
     if dry_run or not config.ANTHROPIC_API_KEY:
         result = canned(prompt_file, ctx)
+        if "clip_script" in prompt_file: result["assigned_format"] = ctx.get("assigned_format"); result["assigned_visual"] = ctx.get("assigned_visual")
         return result, round(random.uniform(0.004, 0.03), 4), result.get("summary", f"{agent} finished")
     client = _anthropic()
     model = config.MOTHER_MODEL if agent == config.MOTHER_NAME else config.AGENT_MODEL
@@ -87,6 +88,8 @@ async def run_agent(agent: str, prompt_file: str, ctx: dict, *, dry_run: bool) -
     except Exception:
         result = {"summary": text[:200], "raw": text}
     result.setdefault("_model", used)
+    if "clip_script" in prompt_file or "clip_order_script" in prompt_file:
+        result["assigned_format"] = ctx.get("assigned_format"); result["assigned_visual"] = ctx.get("assigned_visual")
     c = cost_usd(msg.usage.input_tokens, msg.usage.output_tokens, used)
     return result, round(c, 5), result.get("summary", f"{agent} finished")
 

@@ -22,7 +22,7 @@ VISUAL MODE (assigned): **{{assigned_visual}}**. "gameplay" = narration over foo
 - aita     — a first-person dilemma ("AITA for…"): what happened, what I did, why the other side is furious, end asking the viewer to judge.
 - revenge  — a petty-revenge or malicious-compliance story with a clean, satisfying payoff.
 - story    — a story-time: a strange, funny or heartwarming thing that happened, told plainly.
-- facts    — 5–7 surprising true facts on one theme, each one sentence, verifiable, no numbers you are not sure of.
+- facts    — 5–7 surprising true facts on one theme, each one sentence. Use only facts you are certain are true and uncontested; if a fact might be disputed or you are unsure of a number, pick a different fact.
 - product  — 15–35 s: show the design, who it is for, shop name once.
 
 Rules that decide whether it gets watched:

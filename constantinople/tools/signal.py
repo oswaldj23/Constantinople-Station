@@ -15,6 +15,8 @@ async def compile_brief(ctx, *, scan_from: str = "shorts_scan", rank_from: str =
     genres = scan.get("genres") or []
     top = genres[:5]
     picks = rank.get("picks") or [{"genre": g["genre"], "format": "fast cuts, big captions, hook in the first second", "why": f"{g['top_views']:,} top views vs {g['supply']:,} uploads"} for g in top[:3]]
+    FORMAT_WORDS = ("horror", "aita", "revenge", "story", "facts", "product", "format")
+    rank["avoid"] = [a for a in (rank.get("avoid") or []) if not any(w in str(a).lower() for w in FORMAT_WORDS)]
     brief = {"scanned_at": scan.get("scanned_at"), "leaders": [{"genre": g["genre"], "top_views": g["top_views"], "median_views": g["median_views"], "supply": g["supply"], "opportunity": g["opportunity"]} for g in top],
              "picks": picks, "hooks": rank.get("hooks") or [], "avoid": rank.get("avoid") or ["copyrighted gameplay or music you do not own", "reposting other creators' clips", "anything that needs a real person on camera"],
              "product_angle": rank.get("product_angle") or "none",
@@ -26,7 +28,7 @@ async def compile_brief(ctx, *, scan_from: str = "shorts_scan", rank_from: str =
     return {**brief, "cost": 0.0, "summary": f"brief: {', '.join(p['genre'] for p in picks[:3])}"}
 
 
-ROTATION = ["horror", "aita", "revenge", "story", "horror", "aita", "facts", "revenge", "story", "horror"]
+ROTATION = ["horror", "aita", "revenge", "story", "horror", "aita", "revenge", "story", "horror", "facts"]
 STORY_FORMATS = ["horror", "aita", "revenge", "story", "facts"]
 
 
@@ -77,6 +79,14 @@ def next_format(L) -> str:
     if wants_product and len(recent) >= 5 and "product" not in kinds[:5]:
         return "product"
     n = L.db.execute("SELECT COUNT(*) c FROM artifacts WHERE kind='clip'").fetchone()["c"]
+    # the weekly council may boost a format for its experiment (e.g. {"aita": 2}); two picks in three follow it
+    try:
+        boost = (json.loads(L.kv_get("experiment") or "{}").get("format_boost") or {})
+        boost = {k: float(v) for k, v in boost.items() if k in STORY_FORMATS}
+    except Exception: boost = {}
+    if boost and n % 3 != 2:
+        import random as _r
+        return _r.Random(n).choices(STORY_FORMATS, weights=[boost.get(f, 1.0) for f in STORY_FORMATS], k=1)[0]
     res = our_results(L)
     if res["videos_with_stats"] >= 8 and len(res["per_format"]) >= 2:
         import random as _r
