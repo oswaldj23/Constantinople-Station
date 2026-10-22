@@ -69,6 +69,9 @@ class Mother:
         elif action == "wake":
             self.orch.set_status(bay, "wake"); self.say(f"Waking {bay} · {reason}", action=action, bay_ref=bay)
         elif action == "escalate":
+            # one open escalation per bay at a time: the same broken thing does not get a new alarm every poll
+            if any(a["bay"] == bay and a["gate"] == "escalation" for a in self.L.approvals("pending")):
+                self.say(f"{bay}: still waiting on {config.CREATOR} for the open escalation · {reason[:80]}", action="watch", bay_ref=bay); return
             aid = self.L.request_approval(bay, "mother", "escalation", f"{self.name} needs {config.CREATOR}: {reason}", {"incident": ev or {}})
             self.say(f"ESCALATED to {config.CREATOR} · #{aid} · {bay}: {reason}", action=action, bay_ref=bay, approval=aid)
             self.retries[bay] = 0
