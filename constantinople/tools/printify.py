@@ -11,8 +11,8 @@ API = "https://api.printify.com/v1"
 PRODUCTS = {
     # Prices include US shipping (set Etsy's "free shipping guarantee" on): buyers convert on "free shipping" and Etsy ranks it.
     "tee":        {"titles": ["Unisex Heavy Cotton Tee"], "fallback": 6,  "price": {"default": 2995, "2XL": 3195, "3XL": 3395}, "label": "T-Shirt", "scale": 0.85, "y": 0.4},
-    "sweatshirt": {"titles": ["Unisex Heavy Blend", "Crewneck Sweatshirt"], "fallback": 49, "price": {"default": 4495, "2XL": 4795, "3XL": 4995}, "label": "Sweatshirt", "scale": 0.75, "y": 0.42},
-    "hoodie":     {"titles": ["Unisex Heavy Blend", "Hooded Sweatshirt"], "fallback": 77, "price": {"default": 4995, "2XL": 5295, "3XL": 5495}, "label": "Hoodie", "scale": 0.7, "y": 0.45},
+    "sweatshirt": {"titles": ["Unisex Heavy Blend", "Crewneck Sweatshirt"], "fallback": 49, "price": {"default": 4495, "2XL": 4795, "3XL": 4995}, "label": "Sweatshirt", "scale": 0.72, "y": 0.45},
+    "hoodie":     {"titles": ["Unisex Heavy Blend", "Hooded Sweatshirt"], "fallback": 77, "price": {"default": 4995, "2XL": 5295, "3XL": 5495}, "label": "Hoodie", "scale": 0.68, "y": 0.5},
     "mug":        {"titles": ["Ceramic Mug", "11oz"], "fallback": 68, "price": {"default": 1895, "15oz": 2195}, "label": "Mug", "scale": 0.7, "y": 0.5},
     "tote":       {"titles": ["Tote Bag"], "fallback": 1086, "price": {"default": 2295}, "label": "Tote Bag", "scale": 0.6, "y": 0.45},
     "poster":     {"titles": ["Matte", "Vertical Posters"], "fallback": 282, "price": {"default": 2695, '16" x 20"': 3695, '18" x 24"': 4195, '24" x 36"': 5695}, "label": "Art Print", "scale": 1.0, "y": 0.5},
@@ -82,7 +82,9 @@ async def create_product(ctx, *, design_from: str = "design_draft.files", produc
     spec = PRODUCTS[ptype]
     if dry_run or not config.PRINTIFY_API_KEY:
         pid = f"pf_{random.randint(100000, 999999)}"
-        return {"product_id": pid, "product": spec["label"], "type": ptype, "provider": "sample", "mockups": [f"https://example.invalid/mockup/{pid}/{ptype}.png"],
+        rm = (ctx.get("trend_scan") or {}).get("remake_of")
+        if rm and ctx.get("_ledger") is not None: _remake_done(ctx["_ledger"], rm, pid)
+        return {"product_id": pid, "remake_of": rm, "product": spec["label"], "type": ptype, "provider": "sample", "mockups": [f"https://example.invalid/mockup/{pid}/{ptype}.png"],
                 "cost": 0.0, "summary": f"Mockups built for {spec['label'].lower()} ({pid})"}
     import httpx
     files = _lookup(ctx, design_from) or []
@@ -111,24 +113,52 @@ async def create_product(ctx, *, design_from: str = "design_draft.files", produc
         if r.status_code >= 400: return {"summary": "product create failed", "incident": f"Print partner could not create the product · {r.status_code} {r.text[:160]}", "cost": 0.0}
         p = r.json()
         mockups = [i["src"] for i in p.get("images", []) if i.get("src")]
-        # look at the mockup before anyone calls it ready: whole design visible, centred, not cut off; else shrink/recentre and rebuild (twice)
+        # look at the mockup before anyone calls it ready: every word readable and spelled as designed, nothing cut
+        # off, centred, sensible size. If not, move/shrink in the direction the check names and rebuild (up to 3 tries).
+        expected_text = (ctx.get("design_draft") or {}).get("text") or (ctx.get("trend_scan") or {}).get("text")
         placement = dict(place); checks = []
-        for attempt in range(3):
-            ok, why = _mockup_ok(mockups[0] if mockups else None, concept)
+        for attempt in range(4):
+            ok, why = _mockup_ok(mockups[0] if mockups else None, concept, expected_text)
             checks.append(why)
-            if ok or attempt == 2: break
-            placement = {**placement, "scale": round(placement["scale"] * 0.75, 2), "y": round(max(0.3, placement["y"] - 0.07), 2)}
+            if ok or attempt == 3: break
+            placement = _adjust(placement, why)
             areas2 = [{"variant_ids": a["variant_ids"], "placeholders": [{"position": "front", "images": [{**img, **placement} for img in a["placeholders"][0]["images"]]}]} for a in areas]
             u = await c.put(f"{API}/shops/{config.PRINTIFY_SHOP_ID}/products/{p['id']}.json", json={"print_areas": areas2})
             if u.status_code >= 400: break
-            import asyncio as _a; await _a.sleep(12)   # Printify regenerates mockups asynchronously
+            import asyncio as _a; await _a.sleep(15)   # Printify regenerates mockups asynchronously
             g = await c.get(f"{API}/shops/{config.PRINTIFY_SHOP_ID}/products/{p['id']}.json")
             if g.status_code == 200: mockups = [i["src"] for i in g.json().get("images", []) if i.get("src")] or mockups
         if not ok:
             await c.delete(f"{API}/shops/{config.PRINTIFY_SHOP_ID}/products/{p['id']}.json")
-            return {"summary": "placement failed", "incident": f"Mockup placement failed QA after 3 tries on {spec['label'].lower()} · {checks[-1]} · product discarded", "cost": 0.0}
-        return {"product_id": p["id"], "product": spec["label"], "type": ptype, "mockups": mockups, "provider": provider["title"], "variants": len(variants), "placement": placement, "mockup_qa": checks[-1], "cost": 0.0,
-                "summary": f"{spec['label']} {p['id']} built · {provider['title']} · {len(variants)} variants · {len(mockups)} mockups · placement {checks[-1][:60]}"}
+            return {"summary": "placement failed", "incident": f"Mockup failed QA after {len(checks)} tries on {spec['label'].lower()} · {checks[-1]} · product discarded, will be remade", "cost": 0.0}
+        remake_of = (ctx.get("trend_scan") or {}).get("remake_of")
+        if remake_of and ctx.get("_ledger") is not None: _remake_done(ctx["_ledger"], remake_of, p["id"])
+        return {"product_id": p["id"], "product": spec["label"], "type": ptype, "mockups": mockups, "provider": provider["title"], "variants": len(variants), "placement": placement, "mockup_qa": checks[-1], "mockup_tries": len(checks), "remake_of": remake_of, "cost": 0.0,
+                "summary": f"{spec['label']} {p['id']} built · {provider['title']} · {len(variants)} variants · mockup checked: {checks[-1][:70]}" + (f" ({len(checks)} tries)" if len(checks) > 1 else "") + (f" · remake of {remake_of}" if remake_of else "")}
+
+
+def _adjust(placement: dict, verdict: str) -> dict:
+    """Move the design the way the mockup check says. Printify's y runs 0 (top) → 1 (bottom); scale is a fraction of
+    the print-area width. 'top cut' → lower and shrink; 'bottom cut' → raise and shrink; sides → centre and shrink;
+    'too large' → shrink; 'too small' → enlarge; anything else → shrink a little and centre."""
+    v = (verdict or "").lower(); p = dict(placement); p["x"] = 0.5
+    if "top" in v:          p["y"] = round(min(0.6, p["y"] + 0.08), 2); p["scale"] = round(p["scale"] * 0.85, 2)
+    elif "bottom" in v:     p["y"] = round(max(0.3, p["y"] - 0.08), 2); p["scale"] = round(p["scale"] * 0.85, 2)
+    elif "small" in v or "tiny" in v: p["scale"] = round(min(1.0, p["scale"] * 1.25), 2)
+    elif "large" in v or "spill" in v or "big" in v or "left" in v or "right" in v or "side" in v: p["scale"] = round(p["scale"] * 0.8, 2)
+    else:                   p["scale"] = round(p["scale"] * 0.85, 2)
+    return p
+
+
+def _remake_done(L, product_id, new_id):
+    import json as _j
+    try:
+        q = _j.loads(L.kv_get("remake_queue") or "[]")
+        for r in q:
+            if str(r.get("product_id")) == str(product_id): r["status"] = "done"; r["new_product_id"] = new_id
+        L.kv_set("remake_queue", _j.dumps(q))
+    except Exception:
+        pass
 
 
 async def update_listing(ctx, *, product_from: str = "mockup_build.product_id", listing_from: str = "listing_draft", dry_run: bool = True, **_):
@@ -185,21 +215,32 @@ async def poll_orders(ctx, *, dry_run: bool = True, **_):
     return {"sales": sales, "cost": 0.0, "summary": f"{len(sales)} new order(s) from the shop"}
 
 
-def _mockup_ok(url: str | None, concept: str) -> tuple[bool, str]:
-    """Vision check on the first mockup image: is the design fully visible and centred on the product?"""
+def _mockup_ok(url: str | None, concept: str, expected_text: str | None = None) -> tuple[bool, str]:
+    """Vision check on the first mockup image, the way a buyer would see it: every word present and spelled as
+    designed, no letter clipped at any edge, centred, sensible size. Returns (ok, verdict); the verdict names the
+    problem edge ('top cut off', 'bottom cut off', 'too small'...) so the placement can be corrected."""
     if not url: return False, "no mockup image"
     if not config.ANTHROPIC_API_KEY: return True, "unchecked (no model key)"
     try:
         import anthropic, base64, httpx, io
         from PIL import Image
         raw = httpx.get(url, timeout=30).content
-        im = Image.open(io.BytesIO(raw)).convert("RGB"); im.thumbnail((800, 800)); buf = io.BytesIO(); im.save(buf, "JPEG", quality=82)
+        im = Image.open(io.BytesIO(raw)).convert("RGB"); im.thumbnail((900, 900)); buf = io.BytesIO(); im.save(buf, "JPEG", quality=85)
+        want = f' The design should read exactly: "{expected_text}".' if expected_text else " The design has no text."
         c = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-        msg = c.messages.create(model=config.AGENT_MODEL, max_tokens=100, messages=[{"role": "user", "content": [
+        msg = c.messages.create(model=config.AGENT_MODEL, max_tokens=160, messages=[{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.b64encode(buf.getvalue()).decode()}},
-            {"type": "text", "text": f"This is a product mockup for the design '{concept}'. Is the ENTIRE design visible (nothing cut off at any edge), reasonably centred on the printable area, and a sensible size (not tiny, not spilling off)? Reply exactly 'OK' or 'BAD: <reason in under 15 words>'."}]}])
+            {"type": "text", "text": f"Product mockup for the design '{concept}'.{want}\nFirst line: transcribe every word you can see on the product exactly (or NONE).\n"
+                                     "Second line: 'OK' if every letter of every word is fully visible and nothing is clipped at the top, bottom, left or right, the design is centred on the chest/printable area and a sensible size; "
+                                     "otherwise 'BAD: <which edge is cut off / too small / too large / off-centre / misspelled word>' in under 15 words."}]}])
         t = "".join(getattr(b, "text", "") for b in msg.content).strip()
-        return t.upper().startswith("OK"), t[:100]
+        lines = [l.strip() for l in t.splitlines() if l.strip()]
+        seen = lines[0] if lines else ""; verdict = next((l for l in lines[1:] if l.upper().startswith(("OK", "BAD"))), lines[-1] if lines else "")
+        ok = verdict.upper().startswith("OK")
+        if ok and expected_text and seen.upper() != "NONE":
+            from .images import _norm
+            if _norm(seen) != _norm(expected_text): ok = False; verdict = f"BAD: reads '{seen[:40]}' not '{expected_text}' (letters clipped or misspelled)"
+        return ok, (verdict or t)[:120]
     except Exception as e:
         return True, f"unchecked ({type(e).__name__})"
 

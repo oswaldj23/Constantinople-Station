@@ -66,6 +66,7 @@ async def run_agent(agent: str, prompt_file: str, ctx: dict, *, dry_run: bool) -
                "style_library": __import__("constantinople.styles", fromlist=["library_text"]).library_text(),
                "style_results": __import__("constantinople.styles", fromlist=["style_performance"]).style_performance(ctx["_ledger"]), "our_results": __import__("constantinople.tools.signal", fromlist=["our_results"]).our_results(ctx["_ledger"]), "product_type": __import__("constantinople.tools.printify", fromlist=["next_product"]).next_product(ctx["_ledger"]),
                "last_experiment": ctx["_ledger"].kv_get("experiment") or "none yet",
+               "remake": __import__("constantinople.tools.treasury", fromlist=["next_remake"]).next_remake(ctx["_ledger"]) or "none",
                "recent_books": [a["title"] for a in ctx["_ledger"].artifacts(kind_filter="book", limit=8)] or "none yet",
                "recent_stock": [a["title"] for a in ctx["_ledger"].artifacts(kind_filter="stock", limit=8)] or "none yet",
                "recent_digital": [a["title"] for a in ctx["_ledger"].artifacts(kind_filter="digital", limit=8)] or "none yet",
@@ -108,6 +109,10 @@ def canned(prompt_file: str, ctx: dict) -> dict:
         return {"summary": f"{len(movers)} movers above threshold; top: {movers[0]['concept']} +{movers[0]['wow_change_pct']}%",
                 "movers": movers, "brief": {"concept": movers[0]["concept"], "occasion": occ, "style": (ctx.get("assigned_style") or "botanical").split(" — ")[0], "text": (random.choice(["Plant Mom Era", "Dog Mom", "Coffee First", "Est. 1987", "Nurse Life", "Grateful"]) if "YES" in (ctx.get("assigned_style") or "") else None), "audience": "gift buyers, 25-44", "angle": "soft, hand-drawn, two-colour", "avoid": "any named brand, character or existing listing's art"}}
     if "trend" in prompt_file:
+        rm = ctx.get("remake")
+        if isinstance(rm, dict):
+            return {"summary": f"Remake: {rm.get('concept')} ({rm.get('product_type','tee')}) · same design, placement rebuilt", "concept": rm.get("concept") or name, "occasion": "none", "style": rm.get("style") or "botanical", "text": rm.get("text"),
+                    "design_prompt": rm.get("design_prompt") or f"bold lettering design with the exact words \"{rm.get('text')}\"", "products": [rm.get("product_type") or "tee"], "remake_of": rm.get("product_id")}
         brief = (ctx.get("research") or {}).get("brief") or {"concept": name}
         return {"summary": f"Brief locked: {brief['concept']} ({ctx.get('product_type','tee')} · {brief.get('style','botanical')})", "concept": brief["concept"], "occasion": brief.get("occasion", "none"), "style": brief.get("style", "botanical"), "text": brief.get("text"),
                 "design_prompt": (f"bold lettering design with the exact words \"{brief['text']}\"" if brief.get("text") else f"flat hand-drawn illustration of a {brief['concept'].replace(' tee','').replace(' mug','')}, two-colour, cream and sage, lots of negative space, no text"),

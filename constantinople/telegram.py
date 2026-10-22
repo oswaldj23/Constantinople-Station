@@ -193,7 +193,7 @@ class Telegram:
     async def command(self, text: str):
         parts = text.split(); cmd = parts[0].lower().lstrip("/"); arg = parts[1] if len(parts) > 1 else None
         if cmd in ("help", "h"):
-            await self.send("<b>Bridge commands</b>\n/status · /approvals · /approve N · /reject N\n/hold BAY · /boost BAY · /run BAY\n/report · /mother · /listings · /brief · /clips\n/clip NICHE | BRIEF | CTA  (order a short)\n/diag (what is failing) · /audit · /halt · /resume\n/backup (ledger to your phone) · /stockzip · /stockdone\n/quiet · /normal (how much I message you)")
+            await self.send("<b>Bridge commands</b>\n/status · /approvals · /approve N · /reject N\n/hold BAY · /boost BAY · /run BAY\n/report · /mother · /listings · /brief · /clips\n/clip NICHE | BRIEF | CTA  (order a short)\n/diag (what is failing) · /audit · /halt · /resume\n/backup (ledger to your phone) · /stockzip · /stockdone\n/quiet · /normal (how much I message you)\n/remake (designs you pulled from Printify, queued to come back fixed) · /remake off · /remake now")
         elif cmd == "status":
             await self.send(self.status_text())
         elif cmd == "approvals":
@@ -276,6 +276,20 @@ class Telegram:
                 asyncio.create_task(_doc())
         elif cmd == "stockdone":
             self.L.kv_set("stock_pending", "0"); await self.send("Noted — stock queue cleared.")
+        elif cmd == "remake":
+            import json as _j
+            q = _j.loads(self.L.kv_get("remake_queue") or "[]"); queued = [r for r in q if r.get("status") == "queued"]
+            if arg and arg.lower() in ("off", "cancel", "clear"):
+                for r in q:
+                    if r.get("status") == "queued": r["status"] = "cancelled"
+                self.L.kv_set("remake_queue", _j.dumps(q)); await self.send(f"Cancelled {len(queued)} queued remake(s). Nothing you removed will come back unless you ask.")
+            elif arg and arg.lower() == "now":
+                if not queued: await self.send("Nothing queued for remake.")
+                else: asyncio.create_task(self.orch.run_once("etsy")); await self.send(f"Remaking \"{(queued[0].get('title') or queued[0].get('concept') or '')[:50]}\" now — the design is kept, placement rebuilt and checked before it is listed.")
+            else:
+                done = [r for r in q if r.get("status") == "done"]
+                lines = ["<b>Remakes</b>"] + [f"• queued: {(r.get('title') or r.get('concept') or '')[:50]} ({(r.get('product') or '').lower()})" for r in queued] + [f"• done: {(r.get('title') or '')[:50]} → {r.get('new_product_id')}" for r in done[-5:]]
+                await self.send("\n".join(lines) if len(lines) > 1 else "No remakes: nothing you removed from Printify is waiting. When you delete a product there, I notice within 15 minutes, keep the design and queue it to come back with the placement fixed.")
         elif cmd == "listings":
             from . import memory
             rows = memory.listing_performance(self.L)[:10]

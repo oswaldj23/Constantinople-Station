@@ -238,3 +238,13 @@ The published copy of the dashboard on claude.ai runs in a sandbox that cannot r
 - Etsy and Fiverr both restrict automated accounts and have disclosure rules for AI-assisted goods and services. Read the current policies; the station's doctrine (`prompts/doctrine.md`) keeps disclosure on and the similarity rule in place, but policy compliance is yours.
 - Research finds what sells; Production must make something new from it. Copying listing art, text, characters or brands is the fastest way to lose the shop.
 - Every spend is logged. Watch `LEDGER` for a day in dry run before trusting any margin number: marketplace fees, print costs and refunds all come off the top.
+
+## Print QA and remakes
+
+Before a product is called ready, three checks run with no one watching:
+
+1. **Design file** — a render whose artwork touches the canvas edge (the image model clipped the top of a word) is thrown away and re-rendered; every design gets a clear 5 % margin so nothing can sit on the file's edge.
+2. **Lettering read-back** — the words in the design are transcribed and must match the brief exactly, up to three renders.
+3. **Mockup check** — the real Printify mockup is read like a buyer would: every word present and spelled right, nothing clipped at any edge, centred, sensible size. If not, the placement is moved in the direction the check names (top cut → lower and shrink, too small → enlarge…) and the mockup rebuilt, up to four tries; a product that still fails is deleted rather than published.
+
+If the Creator deletes a product in Printify anyway, Treasury notices within 15 minutes, keeps the design, and queues a **remake**: the next Etsy run rebuilds that exact concept with the placement re-checked. Telegram: `/remake` (what is queued), `/remake now`, `/remake off`.

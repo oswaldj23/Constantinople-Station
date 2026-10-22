@@ -9,4 +9,5 @@ steps:
   - {id: collect2,  name: Etsy receipts, kind: tool, quiet: true, tool: etsy.poll_receipts}
   - {id: record2,   name: Reconcile Etsy, kind: tool, quiet: true, tool: treasury.record_sales, args: {sales_from: collect2.sales, bay: etsy, only_if_no_printify: true}}
   - {id: mirror,    name: Cost mirror, kind: tool, tool: treasury.reconcile}
+  - {id: removed,   name: Removed check, kind: tool, quiet: true, tool: treasury.check_removed}
   - {id: stats,     name: Listing stats, kind: tool, quiet: true, tool: etsy.listing_stats}

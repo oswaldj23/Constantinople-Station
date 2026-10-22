@@ -187,6 +187,57 @@ async def publish_directive(ctx, *, from_step: str = "mission_review", dry_run: 
     return {"cost": 0.0, "summary": "Directive published" if d else "No directive change"}
 
 
+async def reconcile_removed(L, c, rows: list) -> list:
+    """Listings the ledger made that no longer exist in Printify were taken down by the Creator (a bad mockup,
+    a design he did not like). Remember them, say so, and queue a remake of the same concept — the design is
+    kept, the placement is rebuilt and re-checked — unless the Creator says otherwise. Returns the new removals."""
+    import json as _j
+    from .. import config as cfg
+    r = await c.get(f"https://api.printify.com/v1/shops/{cfg.PRINTIFY_SHOP_ID}/products.json", params={"limit": 100})
+    if r.status_code != 200: return []
+    live_ids = {str(p["id"]) for p in r.json().get("data", [])}
+    queue = _j.loads(L.kv_get("remake_queue") or "[]"); known = {str(q.get("product_id")) for q in queue}
+    arts = {}
+    for a in L.artifacts(kind_filter="listing", limit=300):
+        p = a["payload"]; mb = p.get("mockup_build") or {}
+        if mb.get("product_id"): arts[str(mb["product_id"])] = {"title": a["title"], "trend_scan": p.get("trend_scan") or {}, "product": mb.get("product"), "type": mb.get("type"), "design": p.get("design_draft") or {}}
+    new = []
+    for pid, info in arts.items():
+        if pid in live_ids or pid in known or pid.startswith("pf_"): continue
+        ts = info["trend_scan"]
+        entry = {"product_id": pid, "title": info["title"], "concept": ts.get("concept"), "text": ts.get("text") or info["design"].get("text"), "style": ts.get("style"), "design_prompt": ts.get("design_prompt"),
+                 "product_type": info.get("type") or "tee", "product": info.get("product"), "status": "queued", "removed_at": datetime.now(timezone.utc).isoformat()}
+        queue.append(entry); new.append(entry)
+    if new:
+        L.kv_set("remake_queue", _j.dumps(queue[-50:]))
+        for e in new:
+            L.emit("review", "status", f"Creator removed \"{(e['title'] or e['concept'] or '')[:60]}\" ({(e['product'] or '').lower()}) from Printify · design kept, placement will be rebuilt and checked before it comes back · /remake off to cancel", agent="VAULT")
+    return new
+
+
+async def check_removed(ctx, *, dry_run: bool = True, **_):
+    """Every Treasury cycle: has the Creator deleted any of our products in Printify? (see reconcile_removed)"""
+    if dry_run or not config.PRINTIFY_API_KEY: return {"cost": 0.0, "summary": "removed check (sample)"}
+    import httpx
+    from .. import memory
+    try:
+        async with httpx.AsyncClient(timeout=60, headers={"Authorization": f"Bearer {config.PRINTIFY_API_KEY}"}) as c:
+            new = await reconcile_removed(ctx["_ledger"], c, memory.listing_performance(ctx["_ledger"]))
+    except Exception as e:
+        return {"cost": 0.0, "summary": f"removed check skipped ({type(e).__name__})"}
+    return {"removed": [n["title"] for n in new], "cost": 0.0, "summary": f"{len(new)} product(s) removed by the Creator · remake queued" if new else "no products removed"}
+
+
+def next_remake(L) -> dict | None:
+    """The oldest queued remake, if any: the Etsy bay makes this before anything new."""
+    import json as _j
+    try:
+        q = _j.loads(L.kv_get("remake_queue") or "[]")
+        return next((r for r in q if r.get("status") == "queued"), None)
+    except Exception:
+        return None
+
+
 async def review_listings(ctx, *, dry_run: bool = True, **_):
     """Daily control loop: which listings sell, which are dead, what Research should double down on.
     Flags only by default. AUTO_RETIRE unpublishes stale listings; AUTO_PRICE raises winners' prices 10%."""
@@ -197,6 +248,13 @@ async def review_listings(ctx, *, dry_run: bool = True, **_):
     if not dry_run and cfg.PRINTIFY_API_KEY:
         import httpx
         async with httpx.AsyncClient(timeout=60, headers={"Authorization": f"Bearer {cfg.PRINTIFY_API_KEY}"}) as c:
+            try:
+                removed = await reconcile_removed(ctx["_ledger"], c, rows)
+                if removed: actions.append(f"{len(removed)} removed by Creator → remake queued")
+                gone = {str(r["product_id"]) for r in __import__("json").loads(ctx["_ledger"].kv_get("remake_queue") or "[]")}
+                rows = [r for r in rows if str(r.get("product_id")) not in gone]; winners = [r for r in winners if str(r.get("product_id")) not in gone]; stale = [r for r in stale if str(r.get("product_id")) not in gone]
+            except Exception:
+                pass
             if cfg.AUTO_RETIRE:
                 for r in stale:
                     if r.get("product_id"):

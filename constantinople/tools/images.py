@@ -31,9 +31,30 @@ def _clean_alpha(im):
     out = Image.fromarray(a, "RGBA")
     bbox = out.getbbox()
     if bbox:
-        pad = int(0.02 * max(out.width, out.height))
-        out = out.crop((max(0, bbox[0] - pad), max(0, bbox[1] - pad), min(out.width, bbox[2] + pad), min(out.height, bbox[3] + pad)))
+        # crop to the artwork, then add a clear 5 % margin on every side so nothing sits on the file's edge
+        # (Printify places the whole file; artwork flush with the edge is what gets cut off on the product)
+        out = out.crop(bbox)
+        pad = int(0.05 * max(out.width, out.height))
+        canvas = Image.new("RGBA", (out.width + 2 * pad, out.height + 2 * pad), (0, 0, 0, 0)); canvas.paste(out, (pad, pad)); out = canvas
     return out
+
+
+def _cut_off(path: str) -> str | None:
+    """A render whose opaque artwork touches the canvas edge was clipped by the image model (the top of the
+    first word, the end of a line). Returns which edge(s), or None when the artwork has clear margin all round."""
+    try:
+        from PIL import Image
+        im = Image.open(path).convert("RGBA"); alpha = im.split()[3].point(lambda v: 255 if v > 60 else 0)
+        bbox = alpha.getbbox()
+        if not bbox: return None
+        edges = []
+        if bbox[1] <= 2: edges.append("top")
+        if bbox[3] >= im.height - 2: edges.append("bottom")
+        if bbox[0] <= 2: edges.append("left")
+        if bbox[2] >= im.width - 2: edges.append("right")
+        return ", ".join(edges) or None
+    except Exception:
+        return None
 
 
 def _upscale(path: str) -> str:
@@ -136,13 +157,16 @@ async def generate(ctx, *, prompt_from: str = "", n: int = 4, size: str = "1024x
     async with httpx.AsyncClient(timeout=180) as c:
         for label, ptxt in jobs:
             ok = False
-            for attempt in range(3 if wanted_text else 1):
+            for attempt in range(3 if wanted_text else 2):
                 r = await c.post("https://api.openai.com/v1/images/generations", headers={"Authorization": f"Bearer {config.IMAGE_API_KEY}"},
                                  json={"model": "gpt-image-1", "prompt": ptxt + (" Simpler lettering, larger letters, fewer decorations." if attempt else ""), "n": 1, "size": "1024x1536" if poster else size, "quality": "medium" if attempt < 2 else "high", "background": "opaque" if poster else "transparent", "output_format": "png"})
                 spent += 1
                 if r.status_code >= 400:
                     return {"summary": "render failed", "incident": f"Image provider error · {r.status_code} {r.text[:140]}", "cost": config.IMAGE_COST_USD * spent}
                 p = OUT / f"{ctx['run_id']}_{label}.png"; p.write_bytes(base64.b64decode(r.json()["data"][0]["b64_json"]))
+                clipped = None if poster else _cut_off(str(p))
+                if clipped:
+                    qa[label] = f"attempt {attempt+1}: artwork cut off at the {clipped} edge"; continue
                 if wanted_text:
                     got = read_text(str(p))
                     if got is None or _norm(got) == _norm(wanted_text):
@@ -150,11 +174,10 @@ async def generate(ctx, *, prompt_from: str = "", n: int = 4, size: str = "1024x
                     qa[label] = f"attempt {attempt+1}: read back '{got}' ≠ '{wanted_text}'"
                 else:
                     got = read_text(str(p))
-                    if got and got.strip().upper() != "NONE": qa[label] = f"unexpected text '{got[:40]}'"
-                    else: qa[label] = "no text, as intended"; ok = True
-                    break
-            if wanted_text and not ok:
-                return {"summary": "lettering failed", "incident": f"Design lettering failed QA after 3 renders · wanted '{wanted_text}' · {qa.get(label)} · concept rebriefed", "cost": config.IMAGE_COST_USD * spent}
+                    if got and got.strip().upper() != "NONE": qa[label] = f"attempt {attempt+1}: unexpected text '{got[:40]}'"; continue
+                    qa[label] = "no text, as intended"; ok = True; break
+            if not ok:
+                return {"summary": "render failed QA", "incident": f"Design failed QA after {attempt+1} render(s) · {qa.get(label)} · concept rebriefed", "cost": config.IMAGE_COST_USD * spent}
             # best of two: a second light candidate, and Mother picks before the dark version is made
             if label == "light" and variants and config.BEST_OF_TWO and not poster:
                 r2 = await c.post("https://api.openai.com/v1/images/generations", headers={"Authorization": f"Bearer {config.IMAGE_API_KEY}"},
@@ -162,8 +185,8 @@ async def generate(ctx, *, prompt_from: str = "", n: int = 4, size: str = "1024x
                 spent += 1
                 if r2.status_code == 200:
                     p2 = OUT / f"{ctx['run_id']}_light_b.png"; p2.write_bytes(base64.b64decode(r2.json()["data"][0]["b64_json"]))
-                    ok2 = True
-                    if wanted_text:
+                    ok2 = not (poster or _cut_off(str(p2)))
+                    if ok2 and wanted_text:
                         got2 = read_text(str(p2)); ok2 = got2 is None or _norm(got2) == _norm(wanted_text)
                     if ok2:
                         win, why = _pick_better(str(p), str(p2), (ctx.get("trend_scan") or {}).get("concept", ""))

@@ -6,6 +6,9 @@ Product type for this run: {{product_type}} (the design must suit it: a mug want
 Style (mandatory): {{assigned_style}}
 Design text from the brief (print exactly, or null): {{research.brief.text}}
 
+Remake request (takes priority over everything above when not "none"): {{remake}}
+If there is a remake request, the Creator pulled that product from Printify because the print placement was wrong — not the design. Reuse its concept, text, style and design_prompt EXACTLY (do not reinvent it), set "products" to its product_type, and include "remake_of": "<its product_id>" in your JSON. The design is rebuilt from the same prompt and the placement is checked on the mockup before it is listed again.
+
 The design_prompt must follow the style rules above. If there is text, the prompt must say: the design contains the exact words "<text>" — spelled exactly, every letter correct, nothing else written — and describe the lettering style; if there is no text, say "no text". Never ask for a shirt, mockup, person or background.
 
-Return JSON: {"summary": "<one line>", "concept": "<short name>", "occasion": "<from the brief or none>", "style": "<style id>", "text": "<exact design text or null>", "design_prompt": "<prompt for the image model, following the style rules>", "products": ["{{product_type}}"]}
+Return JSON: {"summary": "<one line>", "concept": "<short name>", "occasion": "<from the brief or none>", "style": "<style id>", "text": "<exact design text or null>", "design_prompt": "<prompt for the image model, following the style rules>", "products": ["{{product_type}}"], "remake_of": null}
