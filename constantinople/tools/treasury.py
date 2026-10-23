@@ -197,6 +197,7 @@ async def reconcile_removed(L, c, rows: list) -> list:
     if r.status_code != 200: return []
     live_ids = {str(p["id"]) for p in r.json().get("data", [])}
     queue = _j.loads(L.kv_get("remake_queue") or "[]"); known = {str(q.get("product_id")) for q in queue}
+    if not live_ids: return []   # a shop that suddenly reports nothing is an outage or a wrong shop id, never "the Creator deleted everything"
     arts = {}
     for a in L.artifacts(kind_filter="listing", limit=300):
         p = a["payload"]; mb = p.get("mockup_build") or {}
@@ -208,6 +209,9 @@ async def reconcile_removed(L, c, rows: list) -> list:
         entry = {"product_id": pid, "title": info["title"], "concept": ts.get("concept"), "text": ts.get("text") or info["design"].get("text"), "style": ts.get("style"), "design_prompt": ts.get("design_prompt"),
                  "product_type": info.get("type") or "tee", "product": info.get("product"), "status": "queued", "removed_at": datetime.now(timezone.utc).isoformat()}
         queue.append(entry); new.append(entry)
+    if new and len(new) > max(2, len(arts) // 2):
+        L.emit("review", "incident", f"{len(new)} of {len(arts)} products are missing from Printify at once · not queuing remakes (looks like a store change or outage, not deletions) · check PRINTIFY_SHOP_ID", agent="VAULT")
+        return []
     if new:
         L.kv_set("remake_queue", _j.dumps(queue[-50:]))
         for e in new:
