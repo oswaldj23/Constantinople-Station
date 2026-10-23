@@ -193,9 +193,12 @@ async def reconcile_removed(L, c, rows: list) -> list:
     kept, the placement is rebuilt and re-checked — unless the Creator says otherwise. Returns the new removals."""
     import json as _j
     from .. import config as cfg
-    r = await c.get(f"https://api.printify.com/v1/shops/{cfg.PRINTIFY_SHOP_ID}/products.json", params={"limit": 100})
-    if r.status_code != 200: return []
-    live_ids = {str(p["id"]) for p in r.json().get("data", [])}
+    live_ids = set()
+    for page in range(1, 11):   # Printify caps limit at 50; walk the pages
+        r = await c.get(f"https://api.printify.com/v1/shops/{cfg.PRINTIFY_SHOP_ID}/products.json", params={"limit": 50, "page": page})
+        if r.status_code != 200: return []
+        j = r.json(); live_ids |= {str(p["id"]) for p in j.get("data", [])}
+        if page >= int(j.get("last_page") or 1): break
     queue = _j.loads(L.kv_get("remake_queue") or "[]"); known = {str(q.get("product_id")) for q in queue}
     if not live_ids: return []   # a shop that suddenly reports nothing is an outage or a wrong shop id, never "the Creator deleted everything"
     arts = {}
